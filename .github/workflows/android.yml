@@ -2,6 +2,8 @@ name: Build Health2 APK
 on:
   push:
     branches: [main, native-android-port]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
