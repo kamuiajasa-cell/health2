@@ -50,6 +50,12 @@ internal class HrvSpot(
   private val running = AtomicBoolean(false)
 
   @Volatile
+  private var sensorOpen = false
+
+  /** True only after the watch accepted the RR-stream open command. */
+  val isSensorOpen: Boolean get() = sensorOpen
+
+  @Volatile
   private var cancelRequested = false
 
   private fun log(message: String) = events.log(LogDirection.INFO, null, null, null, message)
@@ -106,6 +112,7 @@ internal class HrvSpot(
       }
       opened = true
       session.send(HrRriTest.OpenOrClose.Request(session.params, HrvSpotCodec.OPEN), "HRV measurement open (19/01 {01: 3})")
+      sensorOpen = true
       val startMs = System.currentTimeMillis()
       val startNs = System.nanoTime()
       var lastLeft = -1
@@ -139,6 +146,7 @@ internal class HrvSpot(
             events.log(LogDirection.ERROR, null, null, null, "HRV measurement not closed on the watch: ${e.message}")
           }
         }
+        sensorOpen = false
         liveHeartRate.resume()
         running.set(false)
       }
