@@ -1,0 +1,3 @@
+[submodule "vendor/RunNowNative"]
+	path = vendor/RunNowNative
+	url = https://github.com/kamuiajasa-cell/RunNowNative.git
