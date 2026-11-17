@@ -26,9 +26,12 @@ jobs:
       - name: Restore persistent Health2 signing key
         env:
           HEALTH2_KEYSTORE_BASE64: ${{ secrets.HEALTH2_KEYSTORE_BASE64 }}
+          HEALTH2_KEYSTORE_PASSWORD: ${{ secrets.HEALTH2_KEYSTORE_PASSWORD }}
+          HEALTH2_KEY_ALIAS: ${{ secrets.HEALTH2_KEY_ALIAS }}
+          HEALTH2_KEY_PASSWORD: ${{ secrets.HEALTH2_KEY_PASSWORD }}
         run: |
-          if [ -z "$HEALTH2_KEYSTORE_BASE64" ]; then
-            echo "::error::Missing HEALTH2_KEYSTORE_BASE64 repository secret. See signing setup instructions."
+          if [ -z "$HEALTH2_KEYSTORE_BASE64" ] || [ -z "$HEALTH2_KEYSTORE_PASSWORD" ] || [ -z "$HEALTH2_KEY_ALIAS" ] || [ -z "$HEALTH2_KEY_PASSWORD" ]; then
+            echo "::error::One or more HEALTH2 signing secrets are missing. See SIGNING.md."
             exit 1
           fi
           echo "$HEALTH2_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/health2-release.jks"
