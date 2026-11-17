@@ -252,7 +252,7 @@ class WatchData(context: Context) {
       val out = ArrayList<WatchDay>()
       val cutoff = nowSec() - count.coerceIn(1, 365) * 86400L
       db.rawQuery(
-        "SELECT date(timestamp, 'unixepoch', 'localtime') AS d, MAX(steps), MAX(calories), MAX(distance), " +
+        "SELECT date(timestamp, 'unixepoch', 'localtime') AS d, SUM(steps), SUM(calories), SUM(distance), " +
           "MIN(NULLIF(resting_heart_rate, 0)), AVG(NULLIF(heart_rate, 0)), MIN(NULLIF(heart_rate, 0)), " +
           "MAX(heart_rate), AVG(NULLIF(spo2, 0)) " +
           "FROM step_samples WHERE timestamp >= ? GROUP BY d ORDER BY d DESC",
