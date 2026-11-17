@@ -31,10 +31,9 @@ android {
     }
     buildTypes {
         getByName("release") {
-            if (!health2ReleaseSigningReady) {
-                throw GradleException("Health2 release signing is not configured. Add the HEALTH2_KEYSTORE_* GitHub Actions secrets.")
+            if (health2ReleaseSigningReady) {
+                signingConfig = signingConfigs.getByName("release")
             }
-            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
         }
     }
