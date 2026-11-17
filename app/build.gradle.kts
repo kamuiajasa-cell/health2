@@ -3,6 +3,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+val health2KeystorePath = System.getenv("HEALTH2_KEYSTORE_PATH")
+val health2StorePassword = System.getenv("HEALTH2_KEYSTORE_PASSWORD")
+val health2KeyAlias = System.getenv("HEALTH2_KEY_ALIAS")
+val health2KeyPassword = System.getenv("HEALTH2_KEY_PASSWORD")
+val health2ReleaseSigningReady = listOf(health2KeystorePath, health2StorePassword, health2KeyAlias, health2KeyPassword).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.health2.app"
     compileSdk = 36
@@ -12,6 +18,25 @@ android {
         targetSdk = 34
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+    }
+    signingConfigs {
+        if (health2ReleaseSigningReady) {
+            create("release") {
+                storeFile = file(health2KeystorePath!!)
+                storePassword = health2StorePassword
+                keyAlias = health2KeyAlias
+                keyPassword = health2KeyPassword
+            }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            if (!health2ReleaseSigningReady) {
+                throw GradleException("Health2 release signing is not configured. Add the HEALTH2_KEYSTORE_* GitHub Actions secrets.")
+            }
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
