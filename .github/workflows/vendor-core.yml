@@ -1,0 +1,37 @@
+name: Vendor Huawei core into Health2
+on:
+  push:
+    branches: [native-android-port]
+    paths:
+      - ".github/workflows/vendor-core.yml"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          persist-credentials: true
+      - name: Copy pinned Huawei core into this repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f vendor/huawei/build.gradle.kts ]; then
+            echo "Huawei core already vendored; nothing to do."
+            exit 0
+          fi
+          git clone --quiet https://github.com/kamuiajasa-cell/RunNowNative.git /tmp/RunNowNative
+          git -C /tmp/RunNowNative checkout --quiet --detach 5c44ad08508934160a5a70b123a266eb03214e93
+          mkdir -p vendor
+          cp -a /tmp/RunNowNative/huawei vendor/huawei
+          rm -f .gitmodules
+          git update-index --force-remove vendor/RunNowNative || true
+          rm -rf vendor/RunNowNative
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Vendor pinned Huawei wearable core into Health2"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
