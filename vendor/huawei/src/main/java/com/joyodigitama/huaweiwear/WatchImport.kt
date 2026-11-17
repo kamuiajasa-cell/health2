@@ -104,18 +104,18 @@ internal object WatchImport {
       if (day.steps > 0) row(day.date).put("steps", day.steps)
       day.spo2Avg?.let { row(day.date).put("spO2", it) }
     }
-    // Tidur: tanggal = hari bangun; potongan di hari yang sama dijumlahkan (sama dengan WatchBridge di PolarRun).
-    val sleep = HashMap<String, Long>()
-    val best = HashMap<String, Pair<Long, Int>>()
+    // Satu nilai tidur per tanggal bangun: ambil sesi utama terpanjang.
+    // Sesi pendek (mis. tidur siang) dan data duplikat tidak ditambahkan ke malam utama.
+    val mainSleep = HashMap<String, WatchSleepNight>()
     for (n in d.sleepNights(days)) {
       if (n.asleepSec <= 0) continue
       val k = dateOf(n.endSec)
-      sleep[k] = (sleep[k] ?: 0L) + n.asleepSec
-      val sc = n.score
-      if (sc != null && n.asleepSec > (best[k]?.first ?: 0L)) best[k] = Pair(n.asleepSec, sc)
+      if (n.asleepSec > (mainSleep[k]?.asleepSec ?: 0L)) mainSleep[k] = n
     }
-    sleep.forEach { (k, v) -> row(k).put("sleepSecs", v) }
-    best.forEach { (k, v) -> row(k).put("sleepScore", v.second) }
+    mainSleep.forEach { (k, n) ->
+      row(k).put("sleepSecs", n.asleepSec)
+      n.score?.let { row(k).put("sleepScore", it) }
+    }
     // HRV: rata-rata RMSSD per hari bangun; utamakan hasil malam.
     val all = d.hrv(days)
     val pool = all.filter { it.source == "night" }.ifEmpty { all }
