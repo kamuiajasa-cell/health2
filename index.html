@@ -140,7 +140,14 @@ function exportBackup(){const blob=new Blob([JSON.stringify({app:'health2',versi
 function saveProfile(){state.profile={age:Number($('age').value)||null,maxhr:Number($('maxhr').value)||null,baserhr:Number($('baserhr').value)||null};save();toast('Profil disimpan')}
 function clearData(){if(!confirm('Hapus seluruh data health2 dari perangkat ini? Ekspor backup dahulu jika diperlukan.'))return;state.wellness=[];state.activities=[];state.profile={};state.lastSync=null;save();render();toast('Data lokal dihapus')}
 load();render();
-window.health2={nativeImport,render,syncHuawei,go,exportBackup,setHealthMetric};
+// Expose handlers used by the HTML inline onclick attributes.
+window.go=go;
+window.syncHuawei=syncHuawei;
+window.openWatch=openWatch;
+window.exportBackup=exportBackup;
+window.saveProfile=saveProfile;
+window.clearData=clearData;
+window.health2={nativeImport,render,syncHuawei,go,exportBackup,setHealthMetric,openWatch,saveProfile,clearData};
 })();
 </script>
 </body></html>
