@@ -17,8 +17,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -122,7 +126,10 @@ class RunNowBridge(context: Context, private val host: RunNowHost) {
     override fun state(state: LinkState, error: String?) = Unit
     override fun battery(level: Int) = Unit
     override fun syncComplete(summary: SyncSummary) {
-      if (pushesWatchData) pushWatchData()
+      if (pushesWatchData) {
+        pushWatchData()
+        startBriefHrvAfterSync()
+      }
     }
     override fun log(direction: LogDirection, serviceId: Int?, commandId: Int?, hex: String?, message: String) = Unit
 
@@ -142,6 +149,44 @@ class RunNowBridge(context: Context, private val host: RunNowHost) {
   /** Hanya bridge milik halaman utama (index.html) yang mengirim data jam; MainActivity menyalakannya. */
   @Volatile
   var pushesWatchData: Boolean = false
+
+  private val briefHrvPending = AtomicBoolean(false)
+
+  /**
+   * Setelah sinkronisasi berhasil, buka stream RR/HRV selama sekitar satu detik lalu tutup.
+   * Durasi ini sengaja terlalu singkat untuk menghasilkan HRV yang sah; tujuannya hanya
+   * memicu siklus sensor dan memastikan perintah close selalu dikirim oleh HrvSpot.finally.
+   */
+  private fun startBriefHrvAfterSync() {
+    if (!briefHrvPending.compareAndSet(false, true)) return
+    scope.launch {
+      try {
+        if (runtime.hrv.isRunning) return@launch
+        val measurement = launch {
+          try {
+            runtime.hrv.measure()
+          } catch (e: CancellationException) {
+            throw e
+          } catch (_: Exception) {
+            // HRV singkat memang dibatalkan; perangkat yang tidak mendukung juga tidak mengganggu sync.
+          }
+        }
+        val started = withTimeoutOrNull(5_000) {
+          while (!runtime.hrv.isRunning) delay(10)
+          true
+        } ?: false
+        if (started) {
+          delay(1_000)
+          runtime.hrv.cancel()
+          measurement.join()
+        } else {
+          measurement.cancelAndJoin()
+        }
+      } finally {
+        briefHrvPending.set(false)
+      }
+    }
+  }
 
   /**
    * Kirim data jam (wellness, aktivitas, latihan) ke halaman lewat `window.nativeImport`. Dipanggil setelah halaman selesai
