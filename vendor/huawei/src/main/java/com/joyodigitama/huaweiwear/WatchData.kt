@@ -252,7 +252,7 @@ class WatchData(context: Context) {
       val out = ArrayList<WatchDay>()
       val cutoff = nowSec() - count.coerceIn(1, 365) * 86400L
       db.rawQuery(
-        "SELECT date(timestamp, 'unixepoch', 'localtime') AS d, SUM(steps), SUM(calories), SUM(distance), " +
+        "SELECT date(timestamp, 'unixepoch', 'localtime') AS d, MAX(steps), MAX(calories), MAX(distance), " +
           "MIN(NULLIF(resting_heart_rate, 0)), AVG(NULLIF(heart_rate, 0)), MIN(NULLIF(heart_rate, 0)), " +
           "MAX(heart_rate), AVG(NULLIF(spo2, 0)) " +
           "FROM step_samples WHERE timestamp >= ? GROUP BY d ORDER BY d DESC",
@@ -313,19 +313,34 @@ class WatchData(context: Context) {
         // Bila ada baris bertahap, pakai itu saja supaya baris tanpa tahap tidak terhitung dua kali.
         val staged = session.filter { it.stage != null }
         val use = if (staged.isNotEmpty()) staged else session
+        // Watch mengirim beberapa snapshot/segmen yang dapat bertumpang tindih.
+        // Hitung garis waktu unik: setiap detik hanya boleh masuk ke satu tahap.
+        val boundaries = use.flatMap { listOf(it.start, it.end) }.distinct().sorted()
         var deep = 0L
         var light = 0L
         var rem = 0L
         var awake = 0L
         var other = 0L
-        for (s in use) {
-          val d = maxOf(0L, s.end - s.start)
-          when (s.stage) {
-            "deep" -> deep += d
-            "light" -> light += d
-            "rem" -> rem += d
-            "awake" -> awake += d
-            else -> other += d
+        for (i in 0 until boundaries.lastIndex) {
+          val a = boundaries[i]
+          val b = boundaries[i + 1]
+          if (b <= a) continue
+          val active = use.filter { it.start < b && it.end > a }
+          if (active.isEmpty()) continue
+          val stage = when {
+            active.any { it.stage == "deep" } -> "deep"
+            active.any { it.stage == "rem" } -> "rem"
+            active.any { it.stage == "light" } -> "light"
+            active.any { it.stage == "awake" } -> "awake"
+            else -> "other"
+          }
+          val seconds = b - a
+          when (stage) {
+            "deep" -> deep += seconds
+            "light" -> light += seconds
+            "rem" -> rem += seconds
+            "awake" -> awake += seconds
+            else -> other += seconds
           }
         }
         val start = session.minOf { it.start }
