@@ -7,4 +7,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Health2"
 include(":app", ":huawei")
-project(":huawei").projectDir = file("vendor/RunNowNative/huawei")
+project(":huawei").projectDir = file("vendor/huawei")
