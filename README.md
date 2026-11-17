@@ -10,6 +10,8 @@ Health2 adalah aplikasi Android pendamping Huawei Watch dengan dashboard lokal.
 
 Repo `RunNowNative` tetap menjadi proyek sumber terpisah. Health2 tidak mengubahnya. Untuk memperbarui core, ubah pin submodule secara sengaja setelah audit kompatibilitas dan lisensi.
 
+The Huawei core sources are vendored in `vendor/huawei/` from the pinned JoyoFit/Gadgetbridge-derived source snapshot. This makes the Health2 build self-contained; the separate `RunNowNative` repository remains unchanged.
+
 ## Build APK
 
 GitHub Actions workflow **Build Health2 APK** menjalankan:
@@ -29,4 +31,4 @@ Build berhasil hanya membuktikan kompilasi. Pairing Watch Fit 2, izin Bluetooth 
 
 ## Lisensi pihak ketiga
 
-Modul Huawei/JoyoFit membawa lisensi AGPL-3.0-or-later dan pemberitahuan asal-usul di `vendor/RunNowNative/huawei/LICENSE` dan `NOTICE`. Perubahan atau distribusi aplikasi gabungan harus mematuhi ketentuan lisensi tersebut. Health2 tidak berafiliasi dengan atau didukung oleh Huawei.
+Modul Huawei/JoyoFit membawa lisensi AGPL-3.0-or-later dan pemberitahuan asal-usul di `vendor/huawei/LICENSE` dan `NOTICE`. Perubahan atau distribusi aplikasi gabungan harus mematuhi ketentuan lisensi tersebut. Health2 tidak berafiliasi dengan atau didukung oleh Huawei.
