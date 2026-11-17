@@ -172,8 +172,8 @@ class RunNowBridge(context: Context, private val host: RunNowHost) {
           }
         }
         val started = withTimeoutOrNull(5_000) {
-          while (!runtime.hrv.isRunning) delay(10)
-          true
+          while (!runtime.hrv.isSensorOpen && !measurement.isCompleted) delay(10)
+          runtime.hrv.isSensorOpen
         } ?: false
         if (started) {
           delay(1_000)
