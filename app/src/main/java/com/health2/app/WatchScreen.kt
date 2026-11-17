@@ -122,7 +122,7 @@ fun WatchScreen(modifier: Modifier = Modifier) {
     confirm?.let { d ->
         AlertDialog(
             onDismissRequest = { confirm = null },
-            title = { Text("Pasangkan ${d.name} ke PolarRun?") },
+            title = { Text("Pasangkan ${d.name} ke Health2?") },
             text = {
                 Text(
                     "Jam ini belum pernah diikat dengan HP ini. Ikatan pertama menggantikan pasangan HP-nya yang sekarang " +
