@@ -87,6 +87,7 @@ function model(){
  const comparable=targetHr?easy.filter(a=>Math.abs(a.avgHr-targetHr)<=7):[];
  const economy= comparable.length>=4?{n:comparable.length,early:avg(comparable.slice(0,Math.ceil(comparable.length/2)).map(a=>a.duration/a.distance)),late:avg(comparable.slice(Math.floor(comparable.length/2)).map(a=>a.duration/a.distance)),targetHr}:null;
  const recentPain=db.feedback.filter(f=>f.date>=daysAgo(28)&&f.pain>=3).length;
+ const hardFeedback=db.feedback.filter(f=>f.date>=daysAgo(7)&&(num(f.rpe)>=8||num(f.fatigue)>=4||f.response==="hard"||f.response==="stopped")).length;
  const strength=db.feedback.filter(f=>f.strengthDone).length;
  let limits=[{key:"recovery",label:"Pemulihan",score:(rhrDelta>3?3:0)+(hrvPct<-8?3:0)+(sleep&&sleep<6?2:0)+(score<55?2:0)},{key:"durability",label:"Durability",score:(dur.status==="watch"?3:dur.status==="low"?4:0)+recentPain},{key:"load",label:"Manajemen beban",score:loadRatio>1.35?4:loadRatio>1.15?2:0},{key:"consistency",label:"Konsistensi",score:last28.length<4?3:0},{key:"fitness",label:"Fitness aerobik",score:A.length<5?2:0},{key:"strength",label:"Kekuatan",score:strength<2?2:0}].sort((a,b)=>b.score-a.score);
  return{A,last7,prev7,last28,load7,load28,avgWeek,loadRatio,well:w,rhrBase,hrvBase,rhrDelta,hrvPct,sleep,pain,score,known,confidence,parts,dur,economy,limits,recentPain,strength,hardFeedback};
