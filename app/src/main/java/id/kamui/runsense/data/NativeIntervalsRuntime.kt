@@ -1,6 +1,7 @@
 package id.kamui.runsense.data
 
 import android.content.Context
+import android.location.LocationManager
 import com.runnow.data.Clock
 import com.runnow.data.Codec
 import com.runnow.data.snapshot
@@ -11,7 +12,10 @@ import com.runnow.data.IcuHttp
 import com.runnow.data.KeyValueStore
 import com.runnow.data.RunSenseRepository as DomainRepository
 import com.runnow.data.WeatherApi
+import com.runnow.data.OpenMeteoHttp
+import com.runnow.data.Locator
 import com.runnow.domain.GeoLoc
+import com.runnow.domain.ClimCtx
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -55,16 +59,33 @@ class NativeIntervalsRuntime(context: Context) {
                     }
                 }
         }
-        val weather = object : WeatherApi {
-            override suspend fun forecast(lat: Double, lon: Double) = null
-            override suspend fun archive(lat: Double, lon: Double, day: String) = null
-            override suspend fun geocode(name: String): GeoLoc? = null
-            override suspend fun currentTemp(lat: Double, lon: Double): Double? = null
+        val locator = object : Locator {
+            override suspend fun lastLocation(): GeoLoc? = withContext(Dispatchers.IO) {
+                val manager = app.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                manager.getProviders(true).asSequence().mapNotNull { provider ->
+                    runCatching { manager.getLastKnownLocation(provider) }.getOrNull()
+                }.maxByOrNull { it.time }?.let { GeoLoc(it.latitude, it.longitude, t = it.time) }
+            }
         }
         icu = IcuHttp(http) { domain.apiKey }
-        domain = DomainRepository(store, icu, weather, null, null, Clock { System.currentTimeMillis() }, ZoneId.systemDefault())
+        domain = DomainRepository(store, icu, OpenMeteoHttp(http), null, locator, Clock { System.currentTimeMillis() }, ZoneId.systemDefault())
         domain.restore()
     }
+
+    suspend fun refreshClimateContext(): Int {
+        domain.ensureLocation() ?: return 0
+        var matched = 0
+        repeat(4) {
+            val count = domain.climateMatch()
+            matched += count
+            if (count == 0) return@repeat
+        }
+        return matched
+    }
+
+    suspend fun autoHeatToday(): Boolean = domain.autoHeat()
+
+    fun climateContexts(): Map<Long, ClimCtx> = domain.climate.ctx
 
     fun hasApiKey(): Boolean = !domain.apiKey.isNullOrBlank()
 
