@@ -4,7 +4,7 @@ plugins {
 }
 android {
     namespace = "com.joyodigitama.huaweiwear"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         minSdk = 29
         buildConfigField("String", "DISTRIBUTION", "\"sideload\"")
