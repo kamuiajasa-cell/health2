@@ -110,7 +110,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                         }
                     }
                 )
-                RunTab.COACH -> CoachScreen(summary, domainResult, Modifier.padding(padding))
+                RunTab.COACH -> CoachScreen(summary, strength, domainResult, Modifier.padding(padding))
                 RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); intervals.ingestWatchJson(json); changed() }
                 RunTab.SETTINGS -> SettingsScreen(
                     profile, wellness, Modifier.padding(padding),
@@ -268,7 +268,7 @@ private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, onLoadStr
 }
 
 @Composable
-private fun CoachScreen(summary: TrainingSummary, domainResult: com.runnow.domain.ProcessResult?, modifier: Modifier) {
+private fun CoachScreen(summary: TrainingSummary, strength: List<StrengthRecord>, domainResult: com.runnow.domain.ProcessResult?, modifier: Modifier) {
     Page(modifier) {
         Text("RunSense Coach", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
         Text("Evaluasi beban, pemulihan, dan strength", color = Muted, fontSize = 13.sp)
@@ -282,6 +282,23 @@ private fun CoachScreen(summary: TrainingSummary, domainResult: com.runnow.domai
         MetricCard("ACWR", summary.acwr?.let { "%.2f".format(Locale.US, it) } ?: "Belum cukup data beban kronis", Modifier.fillMaxWidth())
         InfoCard("Sesi quality 7 hari", "${summary.qualitySessions7d} sesi tercatat", if (summary.qualitySessions7d >= 2) "KUNCI QUALITY" else "TERPANTAU")
         InfoCard("Strength kaki 48 jam", "%.2f unit beban".format(Locale.US, summary.legStrengthLoad48h), if (summary.legStrengthLoad48h >= 3.4) "WASPADA BEBAN" else "NORMAL")
+        InfoCard("Total strength 48 jam", "%.2f unit beban".format(Locale.US, summary.strengthLoad48h), if (summary.strengthLoad48h >= 4.0) "BEBAN TINGGI" else "TERPANTAU")
+        SectionTitle("Strength yang dibaca Coach", "${strength.size} CATATAN")
+        if (strength.isEmpty()) {
+            EmptyCard("Belum ada catatan strength. Setelah sesi disimpan sebagai selesai, bebannya masuk ke evaluasi Coach.")
+        } else {
+            strength.sortedByDescending { it.date }.take(5).forEach { item ->
+                InfoCard(
+                    strengthLabel(item.category),
+                    "${item.date} · ${item.durationMin} menit · level ${item.level}",
+                    if (item.completed) "DIPERHITUNGKAN" else "BELUM SELESAI"
+                )
+            }
+            Text(
+                "Hanya sesi yang ditandai selesai yang masuk ke beban strength. Beban kaki dan total strength 48 jam terakhir ikut memengaruhi readiness serta rekomendasi sesi berikutnya.",
+                color = Muted, fontSize = 11.sp, lineHeight = 16.sp
+            )
+        }
         SectionTitle("Alasan rekomendasi", "TRANSPARAN")
         summary.rationale.forEachIndexed { index, reason -> InfoCard("Sinyal ${index + 1}", reason, "DATA") }
         Text("Readiness adalah heuristik latihan, bukan diagnosis medis atau prediksi cedera. Nilai dapat belum tersedia jika data pemulihan dan beban belum cukup.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
