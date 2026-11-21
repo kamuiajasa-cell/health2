@@ -2,6 +2,7 @@ package id.kamui.runsense.data
 
 import android.content.Context
 import id.kamui.runsense.domain.*
+import id.kamui.runsense.domain.RawStreamPoint
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -48,6 +49,63 @@ class RunSenseRepository(context: Context) {
     }
 
 
+
+    fun streamPoints(activityId: String): List<RawStreamPoint> {
+        val watchRaw = prefs.getString("watch_stream_$activityId", null)
+        if (watchRaw != null) {
+            val points = try { JSONArray(watchRaw) } catch (_: Exception) { JSONArray() }
+            return (0 until points.length()).mapNotNull { i ->
+                val p = points.optJSONArray(i) ?: return@mapNotNull null
+                if (p.length() < 5) return@mapNotNull null
+                RawStreamPoint(
+                    timeSec = p.optDouble(0, Double.NaN),
+                    heartRate = p.optDouble(1, 0.0),
+                    speedMps = p.optDouble(2, 0.0),
+                    cadenceRaw = p.optDouble(4, 0.0),
+                )
+            }
+        }
+        val raw = prefs.getString("icu_stream_$activityId", null) ?: return emptyList()
+        return parseIntervalsStream(raw)
+    }
+
+    private fun parseIntervalsStream(raw: String): List<RawStreamPoint> {
+        val rootArray = try { JSONArray(raw) } catch (_: Exception) { null }
+        val rootObject = if (rootArray == null) try { JSONObject(raw) } catch (_: Exception) { null } else null
+        fun series(type: String): JSONArray? {
+            if (rootArray != null) {
+                for (i in 0 until rootArray.length()) {
+                    val item = rootArray.optJSONObject(i) ?: continue
+                    if (item.optString("type") == type) return item.optJSONArray("data")
+                }
+            }
+            val value = rootObject?.opt(type)
+            return when (value) {
+                is JSONArray -> value
+                is JSONObject -> value.optJSONArray("data")
+                else -> null
+            }
+        }
+        val time = series("time") ?: return emptyList()
+        val cadence = series("cadence")
+        val hr = series("heartrate")
+        val speed = series("velocity_smooth")
+        val distance = series("distance")
+        var previousTime = 0.0
+        var previousDistance = 0.0
+        return (0 until time.length()).map { i ->
+            val t = time.optDouble(i, Double.NaN)
+            val v = speed?.optDouble(i, 0.0) ?: run {
+                val d = distance?.optDouble(i, 0.0) ?: previousDistance
+                val dt = t - previousTime
+                val derived = if (dt > 0) (d - previousDistance) / dt else 0.0
+                previousDistance = d
+                previousTime = t
+                derived
+            }
+            RawStreamPoint(t, hr?.optDouble(i, 0.0) ?: 0.0, v, cadence?.optDouble(i, 0.0) ?: 0.0)
+        }.filter { it.timeSec.isFinite() }
+    }
 
     /** Merge Intervals.icu / native domain repository records without duplicating stable activity IDs. */
     fun importDomainRecords(
@@ -106,6 +164,15 @@ class RunSenseRepository(context: Context) {
             val item = oldActs.optJSONObject(i) ?: continue
             val id = item.optString("id")
             if (id.isNotBlank()) byId[id] = item
+        }
+        val workouts = root.optJSONArray("workouts") ?: JSONArray()
+        for (i in 0 until workouts.length()) {
+            val workout = workouts.optJSONObject(i) ?: continue
+            val streamId = workout.optString("iid")
+            val points = workout.optJSONArray("pts")
+            if (streamId.isNotBlank() && points != null && points.length() > 0) {
+                prefs.edit().putString("watch_stream_$streamId", points.toString()).apply()
+            }
         }
         val incomingActs = root.optJSONArray("acts") ?: JSONArray()
         var added = 0
