@@ -26,6 +26,7 @@ data class WeeklyReview(
     val adjustment: String,
     val rationale: String,
     val days: List<PlannedDayResult>,
+    val nextWeekSessions: List<PlannedSession>,
 )
 
 object WeeklyPlanReviewer {
@@ -73,8 +74,8 @@ object WeeklyPlanReviewer {
         when {
             elevatedLoad && target > 0 -> {
                 factor = 0.9
-                adjustment = "KURANGI TARGET 10%"
-                rationale = "Beban/pemulihan memberi sinyal hati-hati. Turunkan volume rencana minggu depan sekitar 10%; jangan menambah sesi quality."
+                adjustment = "KURANGI TARGET 10% + RINGANKAN QUALITY"
+                rationale = "Beban/pemulihan memberi sinyal hati-hati. Turunkan volume rencana minggu depan sekitar 10% dan ubah satu sesi quality menjadi easy ringan."
             }
             adherence != null && adherence < 60 -> {
                 factor = 1.0
@@ -94,11 +95,32 @@ object WeeklyPlanReviewer {
                 rationale = "Data belum cukup kuat untuk menaikkan atau memangkas volume. Pertahankan struktur, lalu evaluasi respons tubuh minggu depan."
             }
         }
-        val nextTarget = runPlans.sumOf { it.targetKm } * factor
+
+        var qualityDowngraded = false
+        var previousQualityDate: LocalDate? = null
+        val nextWeekSessions = runPlans.sortedBy { it.date }.map { session ->
+            val quality = isQualitySession(session.title)
+            val tooClose = quality && previousQualityDate?.let {
+                ChronoUnit.DAYS.between(it, session.date) < 3
+            } == true
+            val reduceQuality = quality && elevatedLoad && !qualityDowngraded
+            val title = if (quality && (reduceQuality || tooClose)) {
+                qualityDowngraded = true
+                "Easy ringan (pengganti ${session.title})"
+            } else session.title
+            if (quality && title == session.title) previousQualityDate = session.date
+            PlannedSession(session.date.plusDays(7), title, session.targetKm * factor)
+        }
+        val nextTarget = nextWeekSessions.sumOf { it.targetKm }
         return WeeklyReview(
             monday, target, actual, adherence, completed, due.size, extra,
-            nextTarget, adjustment, rationale, days
+            nextTarget, adjustment, rationale, days, nextWeekSessions
         )
+    }
+
+    private fun isQualitySession(title: String): Boolean {
+        val t = title.lowercase(Locale.ROOT)
+        return listOf("interval", "tempo", "threshold", "quality", "fartlek", "speed", "vo2").any(t::contains)
     }
 
     private fun isRunSession(title: String, km: Double): Boolean {
