@@ -664,6 +664,117 @@ private fun StrengthDialog(onDismiss: () -> Unit, onSave: (String, Int, Int, Boo
 }
 
 @Composable
+private fun PlanRaceDialog(
+    current: com.runnow.domain.Settings,
+    onDismiss: () -> Unit,
+    onSave: (com.runnow.domain.Settings) -> Unit,
+) {
+    val dayKeys = listOf(1, 2, 3, 4, 5, 6, 0)
+    val dayNames = listOf("Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu")
+    val titles = remember(current) {
+        mutableStateListOf<String>().apply {
+            addAll(dayKeys.map { current.plan[it]?.t ?: "" })
+        }
+    }
+    val distances = remember(current) {
+        mutableStateListOf<String>().apply {
+            addAll(dayKeys.map { current.plan[it]?.km?.takeIf { km -> km > 0 }?.toString() ?: "" })
+        }
+    }
+    var raceDate by remember(current) { mutableStateOf(current.race) }
+    var raceDistance by remember(current) { mutableStateOf(if (current.raceDist > 0) current.raceDist.toString() else "") }
+    var raceGoal by remember(current) { mutableStateOf(current.raceGoal) }
+    var goal by remember(current) { mutableStateOf(current.goal) }
+    var style by remember(current) { mutableStateOf(current.style) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rencana mingguan & race") },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 540.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                Text("Rencana latihan", color = Lime, fontWeight = FontWeight.Bold)
+                Text("Isi nama sesi dan target kilometer. Kosongkan hari istirahat.", color = Muted, fontSize = 11.sp)
+                dayKeys.forEachIndexed { index, day ->
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(dayNames[index], color = White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = titles[index], onValueChange = { titles[index] = it },
+                                modifier = Modifier.weight(1f), singleLine = true,
+                                label = { Text("Sesi (Easy/Interval/Rest)") }
+                            )
+                            OutlinedTextField(
+                                value = distances[index], onValueChange = { distances[index] = it },
+                                modifier = Modifier.width(92.dp), singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                label = { Text("Km") }
+                            )
+                        }
+                    }
+                }
+                Divider(color = Color.White.copy(alpha = .12f))
+                Text("Target race", color = Lime, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = raceDate, onValueChange = { raceDate = it },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("Tanggal (YYYY-MM-DD)") }
+                )
+                OutlinedTextField(
+                    value = raceDistance, onValueChange = { raceDistance = it },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    label = { Text("Jarak race (km)") }
+                )
+                OutlinedTextField(
+                    value = raceGoal, onValueChange = { raceGoal = it },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("Target waktu (mm:ss atau h:mm:ss)") }
+                )
+                Text("Fokus latihan", color = Muted, fontSize = 11.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("5K", "10K", "Half", "Marathon", "Umum").forEach { item ->
+                        FilterChip(selected = goal == item, onClick = { goal = item }, label = { Text(item) })
+                    }
+                }
+                Text("Gaya penyesuaian", color = Muted, fontSize = 11.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("conservative" to "Konservatif", "moderate" to "Moderat", "aggressive" to "Agresif").forEach { item ->
+                        FilterChip(selected = style == item.first, onClick = { style = item.first }, label = { Text(item.second) })
+                    }
+                }
+                Text("Coach menggunakan rencana ini untuk membandingkan target dengan aktivitas yang benar-benar tersimpan. Menyimpan tidak mengubah riwayat latihan.", color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val plan = LinkedHashMap<Int, com.runnow.domain.PlanDay>()
+                dayKeys.forEachIndexed { index, day ->
+                    val title = titles[index].trim()
+                    if (title.isNotBlank()) {
+                        plan[day] = com.runnow.domain.PlanDay(title, (distances[index].toDoubleOrNull() ?: 0.0).coerceAtLeast(0.0))
+                    }
+                }
+                val validRaceDate = raceDate.trim().takeIf {
+                    it.isBlank() || runCatching { java.time.LocalDate.parse(it) }.isSuccess
+                } ?: current.race
+                onSave(current.copy(
+                    style = style,
+                    plan = plan,
+                    race = validRaceDate,
+                    raceDist = (raceDistance.toDoubleOrNull() ?: 0.0).coerceAtLeast(0.0),
+                    raceGoal = raceGoal.trim(),
+                    goal = goal,
+                ))
+            }) { Text("Simpan rencana") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
+    )
+}
+
+@Composable
 private fun WellnessDialog(onDismiss: () -> Unit, onSave: (Int, Double, Double) -> Unit) {
     var rhr by remember { mutableStateOf("60") }
     var sleep by remember { mutableStateOf("7") }
