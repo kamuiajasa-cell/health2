@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.verticalScroll
@@ -18,6 +19,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -266,6 +269,8 @@ private fun ProgressScreen(
             MetricCard("SESI 28 HARI", last28.size.toString(), Modifier.weight(1f))
         }
         MetricCard("BEBAN 7 HARI", fmt(summary.acuteLoad), Modifier.fillMaxWidth())
+        SectionTitle("Volume harian", "7 HARI")
+        WeeklyDistanceChart(activities)
         SectionTitle("Review sesi", "MESIN RUNSENSE")
         val runs = domainResult?.activities?.filter { it.act.kind == com.runnow.domain.ActKind.RUN }?.take(5).orEmpty()
         if (runs.isEmpty()) EmptyCard("Review sesi akan muncul setelah aktivitas lari tersedia.")
@@ -273,6 +278,47 @@ private fun ProgressScreen(
         SectionTitle("Aktivitas 28 hari", "TERBARU")
         if (last28.isEmpty()) EmptyCard("Data grafik dan tren akan terbentuk setelah aktivitas dicatat.")
         else last28.sortedByDescending { it.startedAt }.forEach { ActivityCard(it) }
+    }
+}
+
+@Composable
+private fun WeeklyDistanceChart(activities: List<ActivityRecord>) {
+    val today = java.time.LocalDate.now()
+    val dates = (6 downTo 0).map { today.minusDays(it.toLong()) }
+    val values = dates.map { date ->
+        activities.filter { a ->
+            a.type.equals("run", true) &&
+                java.time.Instant.ofEpochMilli(a.startedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate() == date
+        }.sumOf { it.distanceKm }
+    }
+    val maxKm = (values.maxOrNull() ?: 0.0).coerceAtLeast(1.0)
+    Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Jarak lari", color = White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("%.1f km total".format(Locale.US, values.sum()), color = Lime, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            Canvas(Modifier.fillMaxWidth().height(104.dp)) {
+                val slot = size.width / 7f
+                val barWidth = slot * .46f
+                values.forEachIndexed { index, value ->
+                    val height = (value / maxKm * size.height * .86).toFloat()
+                    val left = index * slot + (slot - barWidth) / 2f
+                    drawRoundRect(
+                        color = if (index == 6) Lime else Lime.copy(alpha = .38f),
+                        topLeft = Offset(left, size.height - height),
+                        size = Size(barWidth, height.coerceAtLeast(3f)),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f, 8f)
+                    )
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                dates.forEach { date ->
+                    Text(date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale("id", "ID")),
+                        color = if (date == today) Lime else Muted, fontSize = 9.sp)
+                }
+            }
+        }
     }
 }
 
@@ -483,12 +529,26 @@ private fun CoachRecommendationCard(recommendation: com.runnow.domain.Recommenda
 private fun ReadinessCard(score: Int?, recommendation: String) {
     Surface(color = Panel, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("READINESS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(score?.toString() ?: "—", color = if (score != null && score < 45) Color(0xFFFFB65C) else Lime, fontSize = 42.sp, fontWeight = FontWeight.Black)
-                Text(if (score == null) "Menunggu data" else "/ 100", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("READINESS HARI INI", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                Text(if (score == null) "DATA TERBATAS" else if (score < 45) "PEMULIHAN" else if (score < 65) "KONTROL" else "SIAP TERPANTAU",
+                    color = if (score != null && score < 45) Color(0xFFFFB65C) else Lime, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             }
-            Text(recommendation, color = White, fontSize = 13.sp, lineHeight = 19.sp)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(82.dp)) {
+                    CircularProgressIndicator(progress = ((score ?: 0).coerceIn(0, 100) / 100f), modifier = Modifier.fillMaxSize(),
+                        color = if (score != null && score < 45) Color(0xFFFFB65C) else Lime, trackColor = Color.White.copy(alpha = .10f), strokeWidth = 7.dp)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(score?.toString() ?: "—", color = White, fontSize = 27.sp, fontWeight = FontWeight.Black)
+                        Text("/100", color = Muted, fontSize = 9.sp)
+                    }
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(if (score == null) "Menunggu data" else if (score < 45) "Fokus pulih" else if (score < 65) "Jaga intensitas" else "Ikuti rencana dengan kontrol effort",
+                        color = White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(recommendation, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+                }
+            }
         }
     }
 }
