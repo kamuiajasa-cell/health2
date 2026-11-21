@@ -153,7 +153,11 @@ fun WatchScreen(modifier: Modifier = Modifier, onImported: (String) -> Unit = {}
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Jam", style = MaterialTheme.typography.headlineSmall)
+        Column(verticalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxWidth().padding(top = 5.dp, bottom = 8.dp)) {
+            Text("CONNECTED TRAINING DEVICE", color = MaterialTheme.colorScheme.primary, fontSize = 9.sp, letterSpacing = 1.4.sp)
+            Text("Your watch.", color = MaterialTheme.colorScheme.onBackground, fontSize = 34.sp, lineHeight = 36.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Black)
+            Text("Hubungkan jam, sinkronkan latihan, dan bawa data ke RunSense.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 18.sp)
+        }
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
