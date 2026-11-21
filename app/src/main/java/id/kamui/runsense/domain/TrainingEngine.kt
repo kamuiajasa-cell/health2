@@ -7,6 +7,7 @@ data class ActivityRecord(val id: String, val startedAt: Long, val type: String,
 data class StrengthRecord(val id: String, val date: String, val category: String, val durationMin: Int, val level: Int, val completed: Boolean, val exercise: String = "", val sets: Int = 0, val reps: Int = 0, val resistanceKg: Double = 0.0)
 data class WellnessRecord(val date: String, val restingHr: Int = 0, val sleepHours: Double = 0.0, val hrv: Double = 0.0)
 data class RunWalkSettings(val enabled: Boolean = false, val runSeconds: Int = 225, val walkSeconds: Int = 30)
+data class WeatherSnapshot(val temperatureC: Double, val apparentC: Double, val humidityPct: Int, val windKmh: Double, val precipitationMm: Double, val weatherCode: Int, val fetchedAt: Long, val latitude: Double, val longitude: Double)
 data class TrainingSummary(val acuteLoad: Double, val chronicLoad: Double, val acwr: Double?, val readiness: Int?, val strengthLoad48h: Double, val legStrengthLoad48h: Double, val qualitySessions7d: Int, val recommendation: String, val rationale: List<String>)
 
 object TrainingEngine {
