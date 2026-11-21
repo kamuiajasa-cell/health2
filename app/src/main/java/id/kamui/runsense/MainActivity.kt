@@ -192,31 +192,6 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
 }
 
 @Composable
-private fun AppTopBar(selected: RunTab) {
-    Surface(color = Ink, tonalElevation = 0.dp) {
-        Row(
-            Modifier.fillMaxWidth().height(62.dp).padding(horizontal = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Surface(color = Lime, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(36.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text("R", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.Black)
-                    }
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text("RUNSENSE", color = Lime, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp)
-                    Text(selected.label, color = White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-            Surface(color = Panel, shape = RoundedCornerShape(50)) {
-                Text("NATIVE", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
-            }
-        }
-    }
-}
-
 @Composable
 private fun Page(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
@@ -474,7 +449,7 @@ private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, repositor
 @Composable
 private fun WeeklyReviewCard(review: WeeklyReview) {
     val ratio = if (review.targetKm > 0) (review.actualKm / review.targetKm).coerceIn(0.0, 1.0).toFloat() else 0f
-    Surface(color = Panel, shape = RoundedCornerShape(26.dp), modifier = Modifier.fillMaxWidth().then(Modifier)) {
+    Surface(color = Panel, shape = RoundedCornerShape(26.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
             Text("RINGKASAN PELAKSANAAN", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
@@ -730,13 +705,6 @@ private fun SectionKicker(label: String, index: String) {
         Text(label, color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.35.sp)
         Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = .10f)))
         Text(index, color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-private fun BrandHeader() {
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text("RunSense", color = Lime, fontSize = 29.sp, fontWeight = FontWeight.Black)
-        Text("Latihan cerdas, bertahap, dan berkelanjutan", color = Muted, fontSize = 13.sp)
     }
 }
 
