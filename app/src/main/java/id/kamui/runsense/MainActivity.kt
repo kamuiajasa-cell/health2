@@ -63,9 +63,11 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class RunTab(val label: String, val mark: String) {
-    HOME("Beranda", "⌂"), TRAINING("Latihan", "◷"), PROGRESS("Progress", "↗"),
-    COACH("Coach", "✦"), WATCH("Jam", "⌚"), SETTINGS("Setelan", "⚙")
+    HOME("Beranda", "⌂"), TRAINING("Riwayat", "◷"), PROGRESS("Progress", "↗"),
+    PROFILE("Profil", "◎"), COACH("Coach", "✦"), WATCH("Jam", "⌚")
 }
+
+private val primaryTabs = listOf(RunTab.HOME, RunTab.TRAINING, RunTab.PROGRESS, RunTab.PROFILE)
 
 @Composable
 private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeIntervalsRuntime) {
@@ -101,6 +103,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
             bottomBar = {
                 NavigationBar(containerColor = Ink, contentColor = White, tonalElevation = 0.dp) {
                     RunTab.entries.forEach { tab ->
+                        primaryTabs.forEach { tab ->
                         NavigationBarItem(selected = selected == tab, onClick = { selected = tab },
                             icon = { Text(tab.mark, fontSize = 17.sp) }, label = { Text(tab.label, fontSize = 9.sp, maxLines = 1) },
                             colors = NavigationBarItemDefaults.colors(selectedIconColor = Lime, selectedTextColor = Lime,
@@ -130,8 +133,9 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                 )
                 RunTab.COACH -> CoachScreen(activities, summary, strength, strengthTarget, parqAnswers, domainResult, baseSnapshot, planSettings, Modifier.padding(padding))
                 RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); intervals.ingestWatchJson(json); changed() }
-                RunTab.SETTINGS -> SettingsScreen(
+                RunTab.PROFILE -> SettingsScreen(
                     profile, wellness, Modifier.padding(padding),
+                    onCoach = { selected = RunTab.COACH }, onWatch = { selected = RunTab.WATCH },
                     hasIntervalsKey = intervals.hasApiKey(), syncBusy = syncBusy, syncMessage = syncMessage,
                     onProfile = { showProfile = true }, onWellness = { showWellness = true }, onPlanRace = { showPlanRace = true },
                     strengthTarget = strengthTarget, parqAnswers = parqAnswers,
@@ -629,10 +633,16 @@ private fun SettingsScreen(
     profile: AthleteProfile, wellness: List<WellnessRecord>, modifier: Modifier,
     strengthTarget: Int, parqAnswers: List<Boolean?>, onStrengthTarget: () -> Unit, onParq: () -> Unit,
     hasIntervalsKey: Boolean, syncBusy: Boolean, syncMessage: String,
-    onProfile: () -> Unit, onWellness: () -> Unit, onPlanRace: () -> Unit, onApiKey: () -> Unit, onSync: () -> Unit
+    onProfile: () -> Unit, onWellness: () -> Unit, onPlanRace: () -> Unit, onApiKey: () -> Unit, onSync: () -> Unit,
+    onCoach: () -> Unit, onWatch: () -> Unit
 ) {
     Page(modifier) {
-        PageHero("ATHLETE SETTINGS", "Your", "profile.", "Atur data tubuh, target, jadwal latihan, dan koneksi data.")
+        PageHero("ATHLETE PROFILE", "Your", "profile.", "Atur data tubuh, target, jadwal latihan, dan koneksi data.")
+        SectionTitle("Ruang latihan", "FITUR RUNSENSE")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onCoach, modifier = Modifier.weight(1f)) { Text("✦ Coach") }
+            OutlinedButton(onClick = onWatch, modifier = Modifier.weight(1f)) { Text("⌚ Jam") }
+        }
         InfoCard("Profil detak jantung", "RHR ${profile.restingHr} · HRmax ${profile.maxHr} · LTHR ${profile.thresholdHr}", "EDIT")
         Button(onClick = onProfile, colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Atur profil") }
         SectionTitle("Rencana dan target race", "TERSIMPAN LOKAL")
