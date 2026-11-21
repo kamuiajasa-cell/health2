@@ -67,6 +67,7 @@ fun nativeRunSenseAnalysis(
     val ltPace = "${profile.thresholdPaceSecPerKm / 60}:${(profile.thresholdPaceSecPerKm % 60).toString().padStart(2, '0')}"
     val settings = (settingsOverride ?: baseSnapshot?.settings ?: Settings()).copy(
         athlete = AthleteSettings(lthr = profile.thresholdHr, ltPace = ltPace),
+        heat = if (hotWeather) java.time.LocalDate.now().toString() else "",
     )
     val result = Snapshot(
         profile = p,
