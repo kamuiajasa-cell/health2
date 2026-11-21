@@ -7,3 +7,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "RunSense"
 include(":app")
+include(":domain")
+include(":data")
