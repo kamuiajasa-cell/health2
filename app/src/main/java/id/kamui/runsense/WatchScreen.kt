@@ -37,7 +37,10 @@ import androidx.compose.ui.unit.sp
 import com.joyodigitama.huaweiwear.HuaweiWatch
 import com.joyodigitama.huaweiwear.WatchDevice
 import com.joyodigitama.huaweiwear.WatchException
+import com.joyodigitama.huaweiwear.WatchImport
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -65,7 +68,7 @@ private fun timeOf(sec: Long): String =
     TIME_FMT.format(Instant.ofEpochSecond(sec).atZone(ZoneId.systemDefault()))
 
 @Composable
-fun WatchScreen(modifier: Modifier = Modifier) {
+fun WatchScreen(modifier: Modifier = Modifier, onImported: (String) -> Unit = {}) {
     val ctx = LocalContext.current
     val watch = remember { HuaweiWatch.get(ctx) }
     val scope = rememberCoroutineScope()
@@ -97,7 +100,7 @@ fun WatchScreen(modifier: Modifier = Modifier) {
 
     LaunchedEffect(missing.isEmpty()) { if (missing.isEmpty()) loadBonded() }
 
-    fun connect(d: WatchDevice, confirmBind: Boolean) {
+    suspend fun importLocal(days: Int = 42): String {\n        val result = withContext(Dispatchers.IO) { WatchImport.build(ctx, days) }\n            ?: return "Database jam belum tersedia. Sinkronkan jam lebih dulu."\n        onImported(result.json.toString())\n        return "Diimpor: ${result.acts} aktivitas, ${result.wellnessDays} hari wellness."\n    }\n\n    fun connect(d: WatchDevice, confirmBind: Boolean) {
         scope.launch {
             busy = true
             message = "Menyambung ke ${d.name}…"
