@@ -643,6 +643,15 @@ private fun ProgressScreen(
     val recentStrength = strength.filter { item ->
         item.completed && runCatching { java.time.LocalDate.parse(item.date) }.getOrNull()?.let { !it.isBefore(today.minusDays(27)) } == true
     }
+    val previousStrength = strength.filter { item ->
+        item.completed && runCatching { java.time.LocalDate.parse(item.date) }.getOrNull()?.let {
+            !it.isBefore(today.minusDays(55)) && it.isBefore(today.minusDays(27))
+        } == true
+    }
+    val strengthByCategory = recentStrength.groupBy { it.category }.toSortedMap()
+    val strengthSets = recentStrength.sumOf { it.sets }
+    val strengthReps = recentStrength.sumOf { it.sets * it.reps }
+    val strengthExternalVolume = recentStrength.sumOf { it.sets.toDouble() * it.reps * it.resistanceKg }
     val wellness = snapshot?.wellness.orEmpty()
     val latestWell = wellness.takeLast(7)
     val baselineWell = wellness.dropLast(7)
@@ -701,6 +710,49 @@ private fun ProgressScreen(
         ProgressDimensionCard("Kapasitas latihan", "Volume eksternal, minggu aktif, dan CTL bila tersedia", capacityStatus, confidence(validRuns.size, span), capacityRows, if (volumeDelta == null) "Riwayat minggu selesai belum cukup untuk membandingkan tren volume." else "Median jarak mingguan berubah ${ "%+.1f%%".format(Locale.US, volumeDelta) }. Minggu kosong tetap dihitung; kenaikan bukan target yang harus dipaksakan.")
         ProgressDimensionCard("Durability", "Kestabilan pace dan HR di sepertiga akhir lari panjang", durabilityStatus, confidence(durability.size, if (durability.size > 1) (durability.last().date - durability.first().date) / dayMs else 0.0), durabilityRows, if (durability.size < 3) "Butuh minimal 3 lari easy/long ≥5 km atau ≥40 menit dengan stream valid. Saat ini ${durability.size} sesi memenuhi syarat." else "Dibandingkan sepertiga tengah dengan sepertiga akhir. Elevasi, suhu, dan fueling belum dikontrol.")
         ProgressDimensionCard("Keberlanjutan", "Konsistensi latihan dan sinyal pemulihan dibanding baseline pribadi", sustainabilityStatus, if (latestWell.size >= 5 || recentStrength.size >= 3) "sedang" else "rendah", sustainabilityRows, if (recentRhr != null && baseRhr != null && recentRhr - baseRhr >= 3) "RHR terbaru ≥3 bpm di atas baseline. Ini sinyal untuk dipantau, bukan diagnosis." else "Data nyeri/cedera tidak tersedia lengkap; kartu ini tidak membuat diagnosis atau skor risiko cedera.")
+        SectionTitle("Strength development", "28 HARI")
+        Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column {
+                        Text("Sesi selesai", color = Muted, fontSize = 10.sp)
+                        Text(recentStrength.size.toString(), color = Lime, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Column {
+                        Text("Total set", color = Muted, fontSize = 10.sp)
+                        Text(strengthSets.toString(), color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Column {
+                        Text("Repetisi", color = Muted, fontSize = 10.sp)
+                        Text(strengthReps.toString(), color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                val change = recentStrength.size - previousStrength.size
+                Text(
+                    if (previousStrength.isEmpty()) "Pembanding 28 hari sebelumnya belum tersedia."
+                    else "Dibanding 28 hari sebelumnya: ${if (change > 0) "+" else ""}$change sesi (${previousStrength.size} → ${recentStrength.size}).",
+                    color = Muted, fontSize = 10.sp
+                )
+                if (strengthExternalVolume > 0) {
+                    Text("Volume beban eksternal: ${"%.0f".format(Locale.US, strengthExternalVolume)} kg-rep", color = White, fontSize = 11.sp)
+                }
+            }
+        }
+        if (strengthByCategory.isEmpty()) {
+            EmptyCard("Belum ada strength yang ditandai selesai dalam 28 hari terakhir.")
+        } else {
+            strengthByCategory.forEach { (category, records) ->
+                val sets = records.sumOf { it.sets }
+                val reps = records.sumOf { it.sets * it.reps }
+                val external = records.sumOf { it.sets.toDouble() * it.reps * it.resistanceKg }
+                InfoCard(
+                    strengthLabel(category),
+                    "${records.size} sesi · $sets set · $reps repetisi" +
+                        if (external > 0) " · ${"%.0f".format(Locale.US, external)} kg-rep" else "",
+                    "28 HARI"
+                )
+            }
+        }
         SectionTitle("Kapasitas mingguan", "$rangeWeeks MINGGU")
         weekly.forEach { (week, km, count) ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
