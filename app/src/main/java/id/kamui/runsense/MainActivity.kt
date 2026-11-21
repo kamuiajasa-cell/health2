@@ -185,7 +185,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
         ) { padding ->
             when (selected) {
                 RunTab.HOME -> HomeScreen(activities, summary, domainResult, weather, weatherMessage, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onRefreshWeather = { refreshWeather() })
-                RunTab.TRAINING -> TrainingScreen(activities, strength, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
+                RunTab.TRAINING -> TrainingScreen(activities, strength, profile, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
                 RunTab.PROGRESS -> ProgressScreen(
                     activities, summary, domainResult, baseSnapshot, repository, Modifier.padding(padding),
                     onCheckin = { checkinActivity = it },
@@ -382,7 +382,7 @@ private fun TrainingScreen(
     }
     val totalKm = visible.filter { it.type.equals("run", true) || it.type.equals("walk", true) }.sumOf { it.distanceKm }
     val totalMinutes = visible.filter { it.type.equals("run", true) || it.type.equals("walk", true) }.sumOf { it.durationMin }
-    val totalTl = visible.sumOf { TrainingEngine.activityLoad(it, AthleteProfile()) }
+    val totalTl = visible.sumOf { TrainingEngine.activityLoad(it, profile) }
     val seconds = (totalMinutes * 60).roundToInt()
     val durationText = if (seconds >= 3600) "%d:%02d:%02d".format(seconds / 3600, (seconds % 3600) / 60, seconds % 60)
         else "%d:%02d".format(seconds / 60, seconds % 60)
@@ -415,7 +415,7 @@ private fun TrainingScreen(
         }
         SectionTitle("Riwayat aktivitas", "${visible.size} SESI")
         if (visible.isEmpty()) EmptyCard(if (filter == "week") "Belum ada aktivitas minggu ini." else if (filter == "month") "Belum ada aktivitas bulan ini." else "Belum ada aktivitas yang dicatat.")
-        else if (filter == "week") visible.forEach { ActivityCard(it) }
+        else if (filter == "week") visible.forEach { ActivityCard(it, profile) }
         else {
             val grouped = visible.groupBy { activity ->
                 java.time.Instant.ofEpochMilli(activity.startedAt).atZone(java.time.ZoneId.systemDefault())
@@ -430,7 +430,7 @@ private fun TrainingScreen(
                     )
                     Text("${items.size} sesi · %.1f km".format(Locale.US, km), color = Muted, fontSize = 10.sp)
                 }
-                items.forEach { ActivityCard(it) }
+                items.forEach { ActivityCard(it, profile) }
             }
         }
         SectionTitle("Riwayat strength", "${strength.size} CATATAN")
@@ -1362,11 +1362,11 @@ private fun CheckinActivityCard(activity: ActivityRecord, onCheckin: (ActivityRe
 }
 
 @Composable
-private fun ActivityCard(a: ActivityRecord) {
+private fun ActivityCard(a: ActivityRecord, profile: AthleteProfile = AthleteProfile()) {
     val stamp = SimpleDateFormat("dd MMM · HH:mm", Locale("id", "ID")).format(Date(a.startedAt))
     InfoCard("${a.type.replaceFirstChar { it.uppercase() }} · $stamp",
         "${a.durationMin} menit · ${"%.2f".format(Locale.US, a.distanceKm)} km · HR ${if (a.averageHr > 0) a.averageHr else "—"}",
-        "TL ${TrainingEngine.activityLoad(a, AthleteProfile()).roundToInt()}")
+        "TL ${TrainingEngine.activityLoad(a, profile).roundToInt()}")
 }
 
 @Composable
