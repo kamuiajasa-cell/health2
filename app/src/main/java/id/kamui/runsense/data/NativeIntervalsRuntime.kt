@@ -44,6 +44,10 @@ class NativeIntervalsRuntime(context: Context) {
                         val status = connection.responseCode
                         val stream = if (status in 200..399) connection.inputStream else connection.errorStream
                         val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                        if (status in 200..299) {
+                            val streamId = Regex("/activities/([^/?]+)/streams").find(url)?.groupValues?.getOrNull(1)
+                            if (!streamId.isNullOrBlank()) prefs.edit().putString("icu_stream_$streamId", body).apply()
+                        }
                         HttpResponse(status, body)
                     } finally {
                         connection.disconnect()
@@ -64,6 +68,8 @@ class NativeIntervalsRuntime(context: Context) {
     fun hasApiKey(): Boolean = !domain.apiKey.isNullOrBlank()
 
     fun snapshot(): Snapshot = domain.data.snapshot(System.currentTimeMillis(), ZoneId.systemDefault())
+
+    fun streamPoints(activityId: String) = local.streamPoints(activityId)
 
     fun ingestWatchJson(json: String) {
         val parsed = Codec.parseWatchImport(json) ?: return
