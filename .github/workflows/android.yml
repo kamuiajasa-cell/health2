@@ -6,7 +6,7 @@ on:
     branches: [main]
   workflow_dispatch:
 concurrency:
-  group: runsense-android-build
+  group: runsense-android-build-v2
   cancel-in-progress: true
 permissions:
   contents: read
