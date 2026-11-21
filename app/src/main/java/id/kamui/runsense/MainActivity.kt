@@ -44,7 +44,8 @@ class MainActivity : ComponentActivity() {
         window.statusBarColor = android.graphics.Color.rgb(9, 11, 9)
         window.navigationBarColor = android.graphics.Color.rgb(9, 11, 9)
         val repository = RunSenseRepository(applicationContext)
-        setContent { RunSenseNativeApp(repository) }
+        val intervals = NativeIntervalsRuntime(applicationContext)
+        setContent { RunSenseNativeApp(repository, intervals) }
     }
 }
 
@@ -60,7 +61,11 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     var showActivity by remember { mutableStateOf(false) }
     var showStrength by remember { mutableStateOf(false) }
     var showWellness by remember { mutableStateOf(false) }
-    var showProfile by remember { mutableStateOf(false) }\n    var showApiKey by remember { mutableStateOf(false) }\n    var syncBusy by remember { mutableStateOf(false) }\n    var syncMessage by remember { mutableStateOf("") }\n    val scope = rememberCoroutineScope()
+    var showProfile by remember { mutableStateOf(false) }
+    var showApiKey by remember { mutableStateOf(false) }
+    var syncBusy by remember { mutableStateOf(false) }
+    var syncMessage by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
     val profile = remember(revision) { repository.profile() }
     val activities = remember(revision) { repository.activities() }
     val strength = remember(revision) { repository.strength() }
@@ -121,6 +126,19 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
         if (showProfile) ProfileDialog(profile, onDismiss = { showProfile = false }, onSave = {
             repository.saveProfile(it); showProfile = false; changed()
         })
+        if (showApiKey) ApiKeyDialog(onDismiss = { showApiKey = false }, onSave = { key ->
+            showApiKey = false
+            scope.launch {
+                syncBusy = true
+                syncMessage = "Menyinkronkan Intervals.icu…"
+                try {
+                    syncMessage = withContext(Dispatchers.IO) { intervals.sync(key) }
+                    changed()
+                } catch (e: Exception) {
+                    syncMessage = "Gagal sinkron: ${e.message}"
+                } finally { syncBusy = false }
+            }
+        })
     }
 }
 
@@ -133,7 +151,8 @@ private fun Page(modifier: Modifier, content: @Composable ColumnScope.() -> Unit
 private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummary, domainResult: com.runnow.domain.ProcessResult?, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { BrandHeader() }
-        item { ReadinessCard(domainResult?.athlete?.score ?: summary.readiness, summary.recommendation) }\n        item { CoachRecommendationCard(domainResult?.recommendation) }
+        item { ReadinessCard(domainResult?.athlete?.score ?: summary.readiness, summary.recommendation) }
+        item { CoachRecommendationCard(domainResult?.recommendation) }
         item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             MetricCard("BEBAN 7 HARI", fmt(summary.acuteLoad), Modifier.weight(1f))
             MetricCard("ACWR", summary.acwr?.let { "%.2f".format(Locale.US, it) } ?: "—", Modifier.weight(1f))
@@ -382,6 +401,27 @@ private fun ProfileDialog(profile: AthleteProfile, onDismiss: () -> Unit, onSave
         } },
         confirmButton = { TextButton(onClick = { onSave(AthleteProfile(rhr.toIntOrNull() ?: 60, max.toIntOrNull() ?: 185, lt.toIntOrNull() ?: 160, pace.toIntOrNull() ?: 390)) }) { Text("Simpan") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } })
+}
+
+@Composable
+private fun ApiKeyDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var key by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("API key Intervals.icu") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Masukkan API key pribadi dari pengaturan akun Intervals.icu. Kunci disimpan di penyimpanan privat aplikasi.", color = Muted, fontSize = 12.sp)
+                OutlinedTextField(
+                    value = key, onValueChange = { key = it }, label = { Text("API key") },
+                    singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { if (key.isNotBlank()) onSave(key.trim()) }) { Text("Simpan & sinkron") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
+    )
 }
 
 @Composable
