@@ -43,6 +43,8 @@ import id.kamui.runsense.domain.*
 import com.runnow.domain.ActivityItem
 import com.runnow.domain.Snapshot
 import com.runnow.domain.reviewRun
+import com.runnow.domain.stage
+import com.runnow.domain.detectType
 import com.runnow.domain.PLAN_DAYS
 import com.runnow.domain.hasPlan
 import com.runnow.domain.planOf
@@ -51,6 +53,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlin.math.abs
 
 private var Ink by mutableStateOf(Color(0xFF0A0A0A))
 private var Panel by mutableStateOf(Color(0xFF1E1E1E))
@@ -187,7 +190,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                 RunTab.HOME -> HomeScreen(activities, summary, domainResult, weather, weatherMessage, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onRefreshWeather = { refreshWeather() })
                 RunTab.TRAINING -> TrainingScreen(activities, strength, profile, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
                 RunTab.PROGRESS -> ProgressScreen(
-                    activities, summary, domainResult, baseSnapshot, repository, Modifier.padding(padding),
+                    activities, summary, domainResult, baseSnapshot, repository, strength, profile, Modifier.padding(padding),
                     onCheckin = { checkinActivity = it },
                     onLoadStream = { id ->
                         scope.launch {
@@ -362,6 +365,7 @@ private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummar
 private fun TrainingScreen(
     activities: List<ActivityRecord>,
     strength: List<StrengthRecord>,
+    profile: AthleteProfile,
     modifier: Modifier,
     onAdd: () -> Unit,
     onStrength: () -> Unit
@@ -575,7 +579,7 @@ private fun ProgressScreen(
         else -> "Stabil"
     }
     val ctl = snapshot?.wellness.orEmpty().filter { w ->
-        w.ctl != null && w.ctl > 0 && runCatching { java.time.LocalDate.parse(w.id) }.getOrNull()?.let { !it.isBefore(fromDate) && !it.isAfter(today) } == true
+        w.ctl?.let { it > 0 } == true && runCatching { java.time.LocalDate.parse(w.id) }.getOrNull()?.let { !it.isBefore(fromDate) && !it.isAfter(today) } == true
     }
     val capacityRows = buildList {
         add("Jarak periode" to "${validRuns.sumOf { it.distanceKm }.let { "%.1f km".format(Locale.US, it) }}")
