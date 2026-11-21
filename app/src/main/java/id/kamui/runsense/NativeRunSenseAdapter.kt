@@ -5,6 +5,7 @@ import id.kamui.runsense.domain.AthleteProfile
 import id.kamui.runsense.domain.StrengthRecord
 import id.kamui.runsense.domain.TrainingEngine
 import id.kamui.runsense.domain.WellnessRecord
+import id.kamui.runsense.domain.RunWalkSettings
 import com.runnow.domain.Act
 import com.runnow.domain.ActKind
 import com.runnow.domain.AthleteSettings
@@ -23,6 +24,7 @@ fun nativeRunSenseAnalysis(
     profile: AthleteProfile,
     baseSnapshot: Snapshot? = null,
     settingsOverride: Settings? = null,
+    runWalk: RunWalkSettings = RunWalkSettings(),
 ): com.runnow.domain.ProcessResult {
     val mergedActs = LinkedHashMap<String, Act>()
     baseSnapshot?.acts?.forEach { a -> mergedActs[a.icuId ?: a.lid] = a }
@@ -100,5 +102,20 @@ fun nativeRunSenseAnalysis(
         )
         else -> result.recommendation
     }
-    return result.copy(recommendation = guarded)
+    val adjusted = if (
+        runWalk.enabled && guarded.status == "train" &&
+        guarded.title in setOf("Easy Run", "Easy terbatas", "Easy recovery", "Long Run", "Easy taper", "Long dipotong", "Recovery Run")
+    ) {
+        val durationMin = Regex("\\d+").find(guarded.duration)?.value?.toIntOrNull() ?: 30
+        val mainMin = (durationMin - 10).coerceAtLeast(5)
+        val cycle = runWalk.runSeconds + runWalk.walkSeconds
+        val repeats = ((mainMin * 60.0) / cycle).toInt().coerceAtLeast(1)
+        val runLabel = "%d:%02d".format(runWalk.runSeconds / 60, runWalk.runSeconds % 60)
+        val walkLabel = "%d:%02d".format(runWalk.walkSeconds / 60, runWalk.walkSeconds % 60)
+        guarded.copy(
+            steps = listOf("Pemanasan" to "5 menit jalan", "Inti" to "$repeats× ($runLabel lari + $walkLabel jalan)", "Pendinginan" to "5 menit jalan"),
+            reason = guarded.reason + " Pola run-walk aktif: $runLabel lari / $walkLabel jalan."
+        )
+    } else guarded
+    return result.copy(recommendation = adjusted)
 }
