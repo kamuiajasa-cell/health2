@@ -26,8 +26,29 @@ class RunSenseRepository(context: Context) {
         try { WellnessRecord(o.getString("date"), o.optInt("restingHr"), o.optDouble("sleepHours"), o.optDouble("hrv")) } catch (_: Exception) { null }
     }.sortedBy { it.date }
 
-    fun profile(): AthleteProfile = AthleteProfile(prefs.getInt("rhr", 60), prefs.getInt("maxHr", 185), prefs.getInt("lthr", 160), prefs.getInt("ltPace", 390))
-    fun saveProfile(p: AthleteProfile) { prefs.edit().putInt("rhr", p.restingHr).putInt("maxHr", p.maxHr).putInt("lthr", p.thresholdHr).putInt("ltPace", p.thresholdPaceSecPerKm).apply() }
+    fun profile(): AthleteProfile = AthleteProfile(
+        prefs.getInt("rhr", 60), prefs.getInt("maxHr", 185), prefs.getInt("lthr", 160),
+        prefs.getInt("ltPace", 390), prefs.getInt("heightCm", 0), prefs.getFloat("weightKg", 0f).toDouble()
+    )
+    fun saveProfile(p: AthleteProfile) {
+        prefs.edit().putInt("rhr", p.restingHr).putInt("maxHr", p.maxHr).putInt("lthr", p.thresholdHr)
+            .putInt("ltPace", p.thresholdPaceSecPerKm).putInt("heightCm", p.heightCm.coerceIn(0, 230))
+            .putFloat("weightKg", p.weightKg.toFloat().coerceIn(0f, 250f)).apply()
+    }
+    fun runWalkSettings(): RunWalkSettings = RunWalkSettings(
+        prefs.getBoolean("runwalk_enabled", false),
+        prefs.getInt("runwalk_run_seconds", 225).coerceIn(10, 3600),
+        prefs.getInt("runwalk_walk_seconds", 30).coerceIn(10, 3600)
+    )
+    fun saveRunWalkSettings(value: RunWalkSettings) {
+        prefs.edit().putBoolean("runwalk_enabled", value.enabled)
+            .putInt("runwalk_run_seconds", value.runSeconds.coerceIn(10, 3600))
+            .putInt("runwalk_walk_seconds", value.walkSeconds.coerceIn(10, 3600)).apply()
+    }
+    fun isLightTheme(): Boolean = prefs.getBoolean("light_theme", false)
+    fun saveLightTheme(enabled: Boolean) { prefs.edit().putBoolean("light_theme", enabled).apply() }
+    fun onboardingComplete(): Boolean = prefs.getBoolean("onboarding_complete", false)
+    fun saveOnboardingComplete() { prefs.edit().putBoolean("onboarding_complete", true).apply() }
 
     fun addActivity(type: String, duration: Double, distance: Double, hr: Int, load: Double, quality: Boolean, rpe: Int = 0, feel: String = "", pain: Int = 0) {
         val a = readArray("activities")
