@@ -13,15 +13,15 @@ class RunSenseRepository(context: Context) {
     private val prefs = context.getSharedPreferences("runsense_native_v1", Context.MODE_PRIVATE)
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
-    fun activities(): List<ActivityRecord> = readArray("activities").mapNotNull { o ->
+    fun activities(): List<ActivityRecord> = objects("activities").mapNotNull { o ->
         try { ActivityRecord(o.getString("id"), o.getLong("startedAt"), o.getString("type"), o.getDouble("durationMin"), o.getDouble("distanceKm"), o.optInt("averageHr"), o.optDouble("externalLoad"), o.optBoolean("quality")) } catch (_: Exception) { null }
     }.sortedByDescending { it.startedAt }
 
-    fun strength(): List<StrengthRecord> = readArray("strength").mapNotNull { o ->
+    fun strength(): List<StrengthRecord> = objects("strength").mapNotNull { o ->
         try { StrengthRecord(o.getString("id"), o.getString("date"), o.getString("category"), o.optInt("durationMin"), o.optInt("level"), o.optBoolean("completed")) } catch (_: Exception) { null }
     }.sortedByDescending { it.date }
 
-    fun wellness(): List<WellnessRecord> = readArray("wellness").mapNotNull { o ->
+    fun wellness(): List<WellnessRecord> = objects("wellness").mapNotNull { o ->
         try { WellnessRecord(o.getString("date"), o.optInt("restingHr"), o.optDouble("sleepHours"), o.optDouble("hrv")) } catch (_: Exception) { null }
     }.sortedBy { it.date }
 
@@ -47,6 +47,7 @@ class RunSenseRepository(context: Context) {
         writeArray("wellness", next)
     }
 
+    private fun objects(key: String): List<JSONObject> { val a = readArray(key); return (0 until a.length()).mapNotNull { a.optJSONObject(it) } }
     private fun readArray(k: String): JSONArray = try { JSONArray(prefs.getString(k, "[]")) } catch (_: Exception) { JSONArray() }
     private fun writeArray(k: String, v: JSONArray) { prefs.edit().putString(k, v.toString()).apply() }
 }
