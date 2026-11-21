@@ -212,7 +212,7 @@ class DataGoldenTest {
             }
             for (i in mark until problems.size) problems[i] = "[${sc.kind}/${sc.name}] " + problems[i]
         }
-        if (problems.isNotEmpty()) fail("${problems.size} selisih dari $checks perbandingan (${scs.size} skenario). Contoh pertama:\n" + problems.take(10).joinToString("\n"))
+        if (problems.isNotEmpty()) { println("DATA GOLDEN DIFFS:\n" + problems.take(20).joinToString("\n")); fail("${problems.size} selisih dari $checks perbandingan (${scs.size} skenario). Contoh pertama:\n" + problems.take(10).joinToString("\n")) }
         check(scs.size >= 50 && checks > 100) { "Data uji terlalu sedikit: ${scs.size} skenario, $checks perbandingan" }
     }
 }
