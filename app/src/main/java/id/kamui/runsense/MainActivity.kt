@@ -18,9 +18,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.kamui.runsense.data.RunSenseRepository
+import id.kamui.runsense.data.NativeIntervalsRuntime
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import id.kamui.runsense.domain.*
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -49,13 +54,13 @@ private enum class RunTab(val label: String, val mark: String) {
 }
 
 @Composable
-private fun RunSenseNativeApp(repository: RunSenseRepository) {
+private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeIntervalsRuntime) {
     var selected by remember { mutableStateOf(RunTab.HOME) }
     var revision by remember { mutableIntStateOf(0) }
     var showActivity by remember { mutableStateOf(false) }
     var showStrength by remember { mutableStateOf(false) }
     var showWellness by remember { mutableStateOf(false) }
-    var showProfile by remember { mutableStateOf(false) }
+    var showProfile by remember { mutableStateOf(false) }\n    var showApiKey by remember { mutableStateOf(false) }\n    var syncBusy by remember { mutableStateOf(false) }\n    var syncMessage by remember { mutableStateOf("") }\n    val scope = rememberCoroutineScope()
     val profile = remember(revision) { repository.profile() }
     val activities = remember(revision) { repository.activities() }
     val strength = remember(revision) { repository.strength() }
@@ -84,7 +89,24 @@ private fun RunSenseNativeApp(repository: RunSenseRepository) {
                 RunTab.PROGRESS -> ProgressScreen(activities, summary, Modifier.padding(padding))
                 RunTab.COACH -> CoachScreen(summary, domainResult, Modifier.padding(padding))
                 RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); changed() }
-                RunTab.SETTINGS -> SettingsScreen(profile, wellness, Modifier.padding(padding), onProfile = { showProfile = true }, onWellness = { showWellness = true })
+                RunTab.SETTINGS -> SettingsScreen(
+                    profile, wellness, Modifier.padding(padding),
+                    hasIntervalsKey = intervals.hasApiKey(), syncBusy = syncBusy, syncMessage = syncMessage,
+                    onProfile = { showProfile = true }, onWellness = { showWellness = true },
+                    onApiKey = { showApiKey = true },
+                    onSync = {
+                        scope.launch {
+                            syncBusy = true
+                            syncMessage = "Menyinkronkan Intervals.icu…"
+                            try {
+                                syncMessage = withContext(Dispatchers.IO) { intervals.sync() }
+                                changed()
+                            } catch (e: Exception) {
+                                syncMessage = "Gagal sinkron: ${e.message}"
+                            } finally { syncBusy = false }
+                        }
+                    }
+                )
             }
         }
         if (showActivity) ActivityDialog(onDismiss = { showActivity = false }, onSave = { type, duration, distance, hr, load, quality ->
@@ -194,16 +216,25 @@ private fun CoachScreen(summary: TrainingSummary, domainResult: com.runnow.domai
 }
 
 @Composable
-private fun SettingsScreen(profile: AthleteProfile, wellness: List<WellnessRecord>, modifier: Modifier, onProfile: () -> Unit, onWellness: () -> Unit) {
+private fun SettingsScreen(
+    profile: AthleteProfile, wellness: List<WellnessRecord>, modifier: Modifier,
+    hasIntervalsKey: Boolean, syncBusy: Boolean, syncMessage: String,
+    onProfile: () -> Unit, onWellness: () -> Unit, onApiKey: () -> Unit, onSync: () -> Unit
+) {
     Page(modifier) {
         Text("Pengaturan", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
-        Text("Profil fisiologis dan data pemulihan", color = Muted, fontSize = 13.sp)
+        Text("Profil fisiologis, sinkronisasi, dan pemulihan", color = Muted, fontSize = 13.sp)
         InfoCard("Profil detak jantung", "RHR ${profile.restingHr} · HRmax ${profile.maxHr} · LTHR ${profile.thresholdHr}", "EDIT")
         Button(onClick = onProfile, colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Atur profil") }
+        SectionTitle("Sinkronisasi Intervals.icu", if (hasIntervalsKey) "TERHUBUNG" else "BELUM TERHUBUNG")
+        Text(if (hasIntervalsKey) "API key tersimpan secara lokal. Sinkronkan aktivitas dan wellness dari akun Intervals.icu." else "Masukkan API key Intervals.icu untuk mengambil riwayat aktivitas dan wellness.")
+        Button(onClick = onApiKey, colors = ButtonDefaults.buttonColors(containerColor = Panel, contentColor = Lime)) { Text(if (hasIntervalsKey) "Ganti API key" else "Masukkan API key") }
+        OutlinedButton(onClick = onSync, enabled = hasIntervalsKey && !syncBusy) { Text(if (syncBusy) "Menyinkronkan…" else "Sinkronkan sekarang") }
+        if (syncMessage.isNotBlank()) Text(syncMessage, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
         SectionTitle("Wellness", "${wellness.size} HARI TERCATAT")
         wellness.takeLast(7).reversed().forEach { InfoCard(it.date, "RHR ${it.restingHr} bpm · tidur ${it.sleepHours} jam · HRV ${if (it.hrv > 0) it.hrv else 0.0}", "TERSIMPAN") }
         OutlinedButton(onClick = onWellness) { Text("＋ Catat wellness hari ini") }
-        Text("Semua data disimpan lokal di perangkat. Sinkronisasi otomatis dari Huawei / Intervals belum diaktifkan pada tahap ini.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+        Text("Data aktivitas dan wellness dari Huawei serta Intervals digabung ke riwayat lokal. API key disimpan di penyimpanan privat aplikasi.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
     }
 }
 
