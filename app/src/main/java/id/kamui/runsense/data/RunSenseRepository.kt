@@ -15,7 +15,7 @@ class RunSenseRepository(context: Context) {
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
     fun activities(): List<ActivityRecord> = objects("activities").mapNotNull { o ->
-        try { ActivityRecord(o.getString("id"), o.getLong("startedAt"), o.getString("type"), o.getDouble("durationMin"), o.getDouble("distanceKm"), o.optInt("averageHr"), o.optDouble("externalLoad"), o.optBoolean("quality")) } catch (_: Exception) { null }
+        try { ActivityRecord(o.getString("id"), o.getLong("startedAt"), o.getString("type"), o.getDouble("durationMin"), o.getDouble("distanceKm"), o.optInt("averageHr"), o.optDouble("externalLoad"), o.optBoolean("quality"), o.optInt("rpe"), o.optString("feel"), o.optInt("pain")) } catch (_: Exception) { null }
     }.sortedByDescending { it.startedAt }
 
     fun strength(): List<StrengthRecord> = objects("strength").mapNotNull { o ->
@@ -29,9 +29,9 @@ class RunSenseRepository(context: Context) {
     fun profile(): AthleteProfile = AthleteProfile(prefs.getInt("rhr", 60), prefs.getInt("maxHr", 185), prefs.getInt("lthr", 160), prefs.getInt("ltPace", 390))
     fun saveProfile(p: AthleteProfile) { prefs.edit().putInt("rhr", p.restingHr).putInt("maxHr", p.maxHr).putInt("lthr", p.thresholdHr).putInt("ltPace", p.thresholdPaceSecPerKm).apply() }
 
-    fun addActivity(type: String, duration: Double, distance: Double, hr: Int, load: Double, quality: Boolean) {
+    fun addActivity(type: String, duration: Double, distance: Double, hr: Int, load: Double, quality: Boolean, rpe: Int = 0, feel: String = "", pain: Int = 0) {
         val a = readArray("activities")
-        a.put(JSONObject().put("id", UUID.randomUUID().toString()).put("startedAt", System.currentTimeMillis()).put("type", type).put("durationMin", duration).put("distanceKm", distance).put("averageHr", hr).put("externalLoad", load).put("quality", quality))
+        a.put(JSONObject().put("id", UUID.randomUUID().toString()).put("startedAt", System.currentTimeMillis()).put("type", type).put("durationMin", duration).put("distanceKm", distance).put("averageHr", hr).put("externalLoad", load).put("quality", quality).put("rpe", rpe.coerceIn(0, 10)).put("feel", feel).put("pain", pain.coerceIn(0, 10)))
         writeArray("activities", a)
     }
 
