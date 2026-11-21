@@ -25,6 +25,7 @@ import id.kamui.runsense.domain.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private val Ink = Color(0xFF090B09)
 private val Panel = Color(0xFF1E211D)
