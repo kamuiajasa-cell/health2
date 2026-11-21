@@ -14,6 +14,7 @@ import java.util.Locale
 import java.util.UUID
 
 class RunSenseRepository(context: Context) {
+    private val appContext = context.applicationContext
     private val prefs = context.getSharedPreferences("runsense_native_v1", Context.MODE_PRIVATE)
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
@@ -58,7 +59,7 @@ class RunSenseRepository(context: Context) {
         }.getOrNull()
     }
     fun fetchCurrentWeather(): WeatherSnapshot {
-        val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val manager = appContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val location = manager.getProviders(true).asSequence().mapNotNull { provider ->
             runCatching { manager.getLastKnownLocation(provider) }.getOrNull()
         }.maxByOrNull { it.time } ?: throw IllegalStateException("Lokasi terakhir belum tersedia. Aktifkan lokasi perangkat lalu coba lagi.")
