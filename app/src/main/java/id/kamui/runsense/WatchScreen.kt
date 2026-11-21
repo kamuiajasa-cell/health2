@@ -253,8 +253,7 @@ fun WatchScreen(modifier: Modifier = Modifier, onImported: (String) -> Unit = {}
         }
         if (showLog) {
             Text(
-                log.takeLast(60).joinToString("
-").ifBlank { "(log kosong)" },
+                log.takeLast(60).joinToString("\n").ifBlank { "(log kosong)" },
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp
             )
