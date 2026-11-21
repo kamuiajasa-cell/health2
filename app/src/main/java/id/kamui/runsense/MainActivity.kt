@@ -358,7 +358,7 @@ private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummar
         item { HomePageHero() }
         item { WeatherCard(weather, weatherMessage, onRefreshWeather) }
         item { CoachRecommendationCard(domainResult?.recommendation, onWorkout) }
-        item { ReadinessCard(domainResult?.athlete?.score ?: summary.readiness, summary.recommendation) }
+        item { ReadinessCard(summary.readiness ?: domainResult?.athlete?.score, summary.recommendation) }
         item { WeeklyPlanHomeCard(snapshot) }
         item { SectionKicker("YOUR TRAINING", "01") }
         item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1169,7 +1169,7 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
         } else {
             InfoCard("Skrining PAR-Q", "Tidak ada jawaban YA pada skrining terakhir. Ini bukan jaminan bebas risiko atau izin medis.", "TERISI")
         }
-        ReadinessCard(domainResult?.athlete?.score ?: summary.readiness, summary.recommendation)
+        ReadinessCard(summary.readiness ?: domainResult?.athlete?.score, summary.recommendation)
         CoachRecommendationCard(domainResult?.recommendation)
         domainResult?.athlete?.let { athlete ->
             InfoCard("Tahap kapasitas", athlete.stageName, "STAGE ${athlete.stage}")
