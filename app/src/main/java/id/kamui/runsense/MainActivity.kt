@@ -1,8 +1,12 @@
 package id.kamui.runsense
 
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -27,6 +31,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import id.kamui.runsense.data.RunSenseRepository
 import id.kamui.runsense.data.NativeIntervalsRuntime
 import kotlinx.coroutines.Dispatchers
@@ -95,6 +101,39 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     var syncBusy by remember { mutableStateOf(false) }
     var syncMessage by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val weather = remember(revision) { repository.currentWeather() }
+    var weatherMessage by remember { mutableStateOf("") }
+    val weatherPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        if (grants.values.any { it }) {
+            scope.launch {
+                weatherMessage = "Memuat cuaca dari lokasi perangkat…"
+                try {
+                    withContext(Dispatchers.IO) { repository.fetchCurrentWeather() }
+                    weatherMessage = "Cuaca diperbarui dari Open-Meteo."
+                    changed()
+                } catch (e: Exception) {
+                    weatherMessage = e.message ?: "Cuaca belum tersedia."
+                }
+            }
+        } else weatherMessage = "Izin lokasi ditolak. Cuaca belum dapat diperbarui."
+    }
+    fun refreshWeather() {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            scope.launch {
+                weatherMessage = "Memuat cuaca dari lokasi perangkat…"
+                try {
+                    withContext(Dispatchers.IO) { repository.fetchCurrentWeather() }
+                    weatherMessage = "Cuaca diperbarui dari Open-Meteo."
+                    changed()
+                } catch (e: Exception) {
+                    weatherMessage = e.message ?: "Cuaca belum tersedia."
+                }
+            }
+        } else weatherPermission.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
+    }
     val profile = remember(revision) { repository.profile() }
     val runWalk = remember(revision) { repository.runWalkSettings() }
     val planSettings = remember(revision) { repository.planSettings() }
@@ -105,7 +144,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     val parqAnswers = remember(revision) { repository.parqAnswers() }
     val summary = remember(revision) { TrainingEngine.summarize(activities, strength, wellness, profile) }
     val baseSnapshot = remember(revision) { runCatching { intervals.snapshot() }.getOrNull() }
-    val domainResult = remember(revision) { runCatching { nativeRunSenseAnalysis(activities, strength, wellness, profile, baseSnapshot, planSettings, runWalk) }.getOrNull() }
+    val domainResult = remember(revision) { runCatching { nativeRunSenseAnalysis(activities, strength, wellness, profile, baseSnapshot, planSettings, runWalk, (weather?.temperatureC ?: 0.0) >= 30.0) }.getOrNull() }
     fun changed() { revision++ }
     SideEffect { applyRunSenseTheme(lightTheme) }
 
@@ -126,7 +165,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
             }
         ) { padding ->
             when (selected) {
-                RunTab.HOME -> HomeScreen(activities, summary, domainResult, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
+                RunTab.HOME -> HomeScreen(activities, summary, domainResult, weather, weatherMessage, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onRefreshWeather = { refreshWeather() })
                 RunTab.TRAINING -> TrainingScreen(activities, strength, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
                 RunTab.PROGRESS -> ProgressScreen(
                     activities, summary, domainResult, baseSnapshot, repository, Modifier.padding(padding),
@@ -144,7 +183,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                         }
                     }
                 )
-                RunTab.COACH -> CoachScreen(activities, summary, strength, strengthTarget, parqAnswers, domainResult, baseSnapshot, planSettings, Modifier.padding(padding))
+                RunTab.COACH -> CoachScreen(activities, summary, strength, strengthTarget, parqAnswers, domainResult, baseSnapshot, planSettings, weather, weatherMessage, Modifier.padding(padding), onRefreshWeather = { refreshWeather() })
                 RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); intervals.ingestWatchJson(json); changed() }
                 RunTab.PROFILE -> SettingsScreen(
                     profile, wellness, Modifier.padding(padding),
