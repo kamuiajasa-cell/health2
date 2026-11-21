@@ -71,7 +71,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     val strength = remember(revision) { repository.strength() }
     val wellness = remember(revision) { repository.wellness() }
     val summary = remember(revision) { TrainingEngine.summarize(activities, strength, wellness, profile) }
-    val domainResult = remember(revision) { runCatching { nativeRunSenseAnalysis(activities, wellness, profile) }.getOrNull() }
+    val domainResult = remember(revision) { runCatching { nativeRunSenseAnalysis(activities, strength, wellness, profile) }.getOrNull() }
     fun changed() { revision++ }
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Ink, onBackground = White, onSurface = White)) {
