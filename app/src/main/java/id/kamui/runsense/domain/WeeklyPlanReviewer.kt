@@ -65,17 +65,30 @@ object WeeklyPlanReviewer {
         val actual = actualRuns.filter { !it.localDate().isAfter(today) }.sumOf { it.distanceKm }
         val extra = (actual - target).coerceAtLeast(0.0)
 
+        val recentFeelRuns = actualRuns.filter {
+            !it.localDate().isBefore(today.minusDays(6)) && !it.localDate().isAfter(today) && it.rpe in 1..10
+        }
+        val averageRpe = recentFeelRuns.map { it.rpe }.average().takeIf { recentFeelRuns.size >= 2 }
+        val repeatedPain = recentFeelRuns.count { it.pain >= 3 } >= 2
+        val significantPain = recentFeelRuns.any { it.pain >= 4 }
+        val subjectiveRisk = significantPain || repeatedPain || (averageRpe != null && averageRpe >= 8.0)
         val elevatedLoad = (summary.acwr ?: 0.0) > 1.3 ||
             (summary.readiness != null && summary.readiness < 45) ||
-            summary.legStrengthLoad48h >= 3.4
+            summary.legStrengthLoad48h >= 3.4 || subjectiveRisk
         val factor: Double
         val adjustment: String
         val rationale: String
         when {
             elevatedLoad && target > 0 -> {
-                factor = 0.9
-                adjustment = "KURANGI TARGET 10% + RINGANKAN QUALITY"
-                rationale = "Beban/pemulihan memberi sinyal hati-hati. Turunkan volume rencana minggu depan sekitar 10% dan ubah satu sesi quality menjadi easy ringan."
+                factor = if (significantPain) 0.85 else 0.9
+                adjustment = if (significantPain) "KURANGI 15% + PRIORITASKAN PEMULIHAN" else "KURANGI TARGET 10% + RINGANKAN QUALITY"
+                val feelReason = when {
+                    significantPain -> " Ada check-in nyeri >=4/10."
+                    repeatedPain -> " Nyeri >=3/10 berulang pada beberapa sesi."
+                    averageRpe != null && averageRpe >= 8.0 -> " RPE rata-rata ${averageRpe.roundToInt()}/10 pada minimal dua sesi."
+                    else -> ""
+                }
+                rationale = "Beban/pemulihan memberi sinyal hati-hati.$feelReason Turunkan volume rencana minggu depan sekitar ${((1.0 - factor) * 100).roundToInt()}% dan ubah satu sesi quality menjadi easy ringan. Bila nyeri masih ada atau mengubah langkah, jangan jalankan sesi lari dan evaluasi lebih lanjut."
             }
             adherence != null && adherence < 60 -> {
                 factor = 1.0
