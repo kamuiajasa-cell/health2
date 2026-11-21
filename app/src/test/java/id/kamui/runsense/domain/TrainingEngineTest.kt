@@ -60,4 +60,24 @@ class TrainingEngineTest {
         assertTrue(load.first > 0.0)
         assertEquals(load.first, load.second, 0.001)
     }
+    @Test fun cadenceAnalyzerCreatesFiveSecondRunWalkSegments() {
+        val points = (0..19).map { second ->
+            RawStreamPoint(
+                timeSec = second.toDouble(),
+                heartRate = 150.0,
+                speedMps = if (second < 10) 2.8 else 2.0,
+                cadenceRaw = if (second < 10) 80.0 else 65.0
+            )
+        }
+        val result = CadenceAnalyzer.analyze(points, 5)
+        assertEquals(4, result.windows.size)
+        assertEquals(160.0, result.windows[0].cadenceSpm!!, 0.001)
+        assertEquals("Lari", result.windows[0].mode)
+        assertEquals(130.0, result.windows[2].cadenceSpm!!, 0.001)
+        assertEquals("Jalan", result.windows[2].mode)
+        assertEquals(2, result.runningWindows)
+        assertEquals(2, result.walkingWindows)
+        assertEquals(160, result.averageRunningCadence)
+    }
+
 }
