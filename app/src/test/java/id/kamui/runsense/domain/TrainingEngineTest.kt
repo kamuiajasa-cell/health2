@@ -34,6 +34,24 @@ class TrainingEngineTest {
         assertTrue(summary.recommendation.contains("Hindari quality"))
     }
 
+    @Test fun completedLegStrengthChangesCoachRecommendation() {
+        val now = System.currentTimeMillis()
+        val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(now))
+        val strength = listOf(StrengthRecord("s", date, "leg", 30, 4, true))
+        val summary = TrainingEngine.summarize(emptyList(), strength, emptyList(), AthleteProfile(), now)
+        assertTrue(summary.legStrengthLoad48h >= 3.4)
+        assertTrue(summary.recommendation.contains("strength"))
+    }
+
+    @Test fun unfinishedStrengthDoesNotAffectCoachLoad() {
+        val now = System.currentTimeMillis()
+        val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(now))
+        val strength = listOf(StrengthRecord("s", date, "leg", 30, 4, false))
+        val load = TrainingEngine.strengthLoad48h(strength, now)
+        assertEquals(0.0, load.first, 0.001)
+        assertEquals(0.0, load.second, 0.001)
+    }
+
     @Test fun completedLegStrengthIsIncludedIn48HourLoad() {
         val now = System.currentTimeMillis()
         val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(now))
