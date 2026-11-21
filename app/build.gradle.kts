@@ -5,7 +5,7 @@ plugins {
 }
 android {
     namespace = "id.kamui.runsense"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         applicationId = "id.kamui.runsense"
         minSdk = 29
