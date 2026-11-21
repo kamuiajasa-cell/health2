@@ -75,16 +75,18 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     var showWellness by remember { mutableStateOf(false) }
     var showProfile by remember { mutableStateOf(false) }
     var showApiKey by remember { mutableStateOf(false) }
+    var showPlanRace by remember { mutableStateOf(false) }
     var syncBusy by remember { mutableStateOf(false) }
     var syncMessage by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val profile = remember(revision) { repository.profile() }
+    val planSettings = remember(revision) { repository.planSettings() }
     val activities = remember(revision) { repository.activities() }
     val strength = remember(revision) { repository.strength() }
     val wellness = remember(revision) { repository.wellness() }
     val summary = remember(revision) { TrainingEngine.summarize(activities, strength, wellness, profile) }
     val baseSnapshot = remember(revision) { runCatching { intervals.snapshot() }.getOrNull() }
-    val domainResult = remember(revision) { runCatching { nativeRunSenseAnalysis(activities, strength, wellness, profile, baseSnapshot) }.getOrNull() }
+    val domainResult = remember(revision) { runCatching { nativeRunSenseAnalysis(activities, strength, wellness, profile, baseSnapshot, planSettings) }.getOrNull() }
     fun changed() { revision++ }
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Ink, onBackground = White, onSurface = White)) {
@@ -120,12 +122,12 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                         }
                     }
                 )
-                RunTab.COACH -> CoachScreen(activities, summary, strength, domainResult, baseSnapshot, Modifier.padding(padding))
+                RunTab.COACH -> CoachScreen(activities, summary, strength, domainResult, baseSnapshot, planSettings, Modifier.padding(padding))
                 RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); intervals.ingestWatchJson(json); changed() }
                 RunTab.SETTINGS -> SettingsScreen(
                     profile, wellness, Modifier.padding(padding),
                     hasIntervalsKey = intervals.hasApiKey(), syncBusy = syncBusy, syncMessage = syncMessage,
-                    onProfile = { showProfile = true }, onWellness = { showWellness = true },
+                    onProfile = { showProfile = true }, onWellness = { showWellness = true }, onPlanRace = { showPlanRace = true },
                     onApiKey = { showApiKey = true },
                     onSync = {
                         scope.launch {
@@ -153,6 +155,9 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
         })
         if (showProfile) ProfileDialog(profile, onDismiss = { showProfile = false }, onSave = {
             repository.saveProfile(it); showProfile = false; changed()
+        })
+        if (showPlanRace) PlanRaceDialog(planSettings, onDismiss = { showPlanRace = false }, onSave = { settings ->
+            repository.savePlanSettings(settings); showPlanRace = false; changed()
         })
         if (showApiKey) ApiKeyDialog(onDismiss = { showApiKey = false }, onSave = { key ->
             showApiKey = false
@@ -410,7 +415,7 @@ private fun WeeklyReviewCard(review: WeeklyReview) {
 }
 
 @Composable
-private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, modifier: Modifier) {
+private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, planSettings: com.runnow.domain.Settings, modifier: Modifier) {
     Page(modifier) {
         Text("RunSense Coach", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
         Text("Evaluasi beban, pemulihan, dan strength", color = Muted, fontSize = 13.sp)
@@ -442,17 +447,21 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
             )
         }
         SectionTitle("Rencana vs realisasi", "MINGGU INI")
-        if (snapshot == null || !snapshot.hasPlan()) {
+        if (planSettings.plan.isEmpty()) {
             EmptyCard("Belum ada rencana mingguan tersimpan di profil RunSense. Setelah rencana tersedia, Coach akan membandingkan target harian dengan kilometer aktual dan strength yang selesai.")
         } else {
             val today = java.time.LocalDate.parse(snapshot.ymd())
             val monday = today.minusDays((today.dayOfWeek.value + 6).toLong() % 7L)
             val plannedSessions = PLAN_DAYS.mapNotNull { day ->
-                snapshot.planOf(day)?.let { p ->
+                planSettings.plan[day]?.let { p ->
                     PlannedSession(monday.plusDays(if (day == 0) 6 else (day - 1).toLong()), p.t, p.km)
                 }
             }
             val weekReview = WeeklyPlanReviewer.evaluate(today, plannedSessions, activities, strength, summary)
+            if (planSettings.race.isNotBlank()) {
+                val phase = snapshot?.copy(settings = planSettings)?.racePhase()
+                InfoCard("Target race", "${planSettings.raceDist} km · ${planSettings.raceGoal.ifBlank { "waktu belum ditentukan" }}", phase?.let { "${it.k.uppercase(Locale.ROOT)} · ${it.days} HARI" } ?: "TANGGAL RACE")
+            }
             WeeklyReviewCard(weekReview)
             SectionTitle("Usulan jadwal minggu depan", "ADAPTIF")
             weekReview.nextWeekSessions.forEach { suggested ->
@@ -486,13 +495,15 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
 private fun SettingsScreen(
     profile: AthleteProfile, wellness: List<WellnessRecord>, modifier: Modifier,
     hasIntervalsKey: Boolean, syncBusy: Boolean, syncMessage: String,
-    onProfile: () -> Unit, onWellness: () -> Unit, onApiKey: () -> Unit, onSync: () -> Unit
+    onProfile: () -> Unit, onWellness: () -> Unit, onPlanRace: () -> Unit, onApiKey: () -> Unit, onSync: () -> Unit
 ) {
     Page(modifier) {
         Text("Pengaturan", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
         Text("Profil fisiologis, sinkronisasi, dan pemulihan", color = Muted, fontSize = 13.sp)
         InfoCard("Profil detak jantung", "RHR ${profile.restingHr} · HRmax ${profile.maxHr} · LTHR ${profile.thresholdHr}", "EDIT")
         Button(onClick = onProfile, colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Atur profil") }
+        SectionTitle("Rencana dan target race", "TERSIMPAN LOKAL")
+        OutlinedButton(onClick = onPlanRace, modifier = Modifier.fillMaxWidth()) { Text("Atur rencana mingguan & race") }
         SectionTitle("Sinkronisasi Intervals.icu", if (hasIntervalsKey) "TERHUBUNG" else "BELUM TERHUBUNG")
         Text(if (hasIntervalsKey) "API key tersimpan secara lokal. Sinkronkan aktivitas dan wellness dari akun Intervals.icu." else "Masukkan API key Intervals.icu untuk mengambil riwayat aktivitas dan wellness.")
         Button(onClick = onApiKey, colors = ButtonDefaults.buttonColors(containerColor = Panel, contentColor = Lime)) { Text(if (hasIntervalsKey) "Ganti API key" else "Masukkan API key") }
