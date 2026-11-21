@@ -75,6 +75,34 @@ class WeeklyPlanReviewerTest {
     }
 
 
+    @Test fun repeatedHighRpeReducesNextWeekTargetAndExplainsWhy() {
+        val monday = LocalDate.of(2026, 11, 16)
+        val plan = listOf(
+            PlannedSession(monday, "Easy run", 5.0),
+            PlannedSession(monday.plusDays(3), "Tempo", 5.0),
+        )
+        val runs = plan.mapIndexed { i, p ->
+            ActivityRecord("r$i", p.date.atTime(7, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(), "run", 35.0, 5.0, 150, rpe = 9, feel = "lebih berat")
+        }
+        val review = WeeklyPlanReviewer.evaluate(monday.plusDays(4), plan, runs, emptyList(), summary())
+        assertEquals("KURANGI TARGET 10% + RINGANKAN QUALITY", review.adjustment)
+        assertEquals(9.0, review.nextWeekTargetKm, 0.001)
+        assertTrue(review.rationale.contains("RPE rata-rata 9/10"))
+    }
+
+    @Test fun significantPainUsesMoreConservativeWeeklyAdjustment() {
+        val monday = LocalDate.of(2026, 11, 16)
+        val plan = listOf(PlannedSession(monday, "Easy run", 5.0), PlannedSession(monday.plusDays(3), "Interval", 5.0))
+        val runs = plan.mapIndexed { i, p ->
+            ActivityRecord("p$i", p.date.atTime(7, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(), "run", 35.0, 5.0, 150, rpe = 6, pain = 4)
+        }
+        val review = WeeklyPlanReviewer.evaluate(monday.plusDays(4), plan, runs, emptyList(), summary())
+        assertEquals("KURANGI 15% + PRIORITASKAN PEMULIHAN", review.adjustment)
+        assertEquals(8.5, review.nextWeekTargetKm, 0.001)
+        assertTrue(review.rationale.contains("nyeri >=4/10"))
+    }
+
+
     @Test fun todaysUnfinishedSessionIsNotCountedAsMissedBeforeDayEnds() {
         val today = LocalDate.of(2026, 11, 19)
         val plan = listOf(PlannedSession(today, "Easy run", 4.0))
