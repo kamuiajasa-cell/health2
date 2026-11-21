@@ -70,6 +70,12 @@ class NativeIntervalsRuntime(context: Context) {
         domain.ingestWatch(parsed)
     }
 
+    suspend fun ensureStreamFor(activityId: String): Boolean {
+        val activity = domain.data.acts.firstOrNull { it.icuId == activityId || it.lid == activityId } ?: return false
+        domain.ensureStream(activity)
+        return domain.data.sx.containsKey(activity.icuId ?: activity.lid)
+    }
+
     suspend fun sync(apiKey: String? = null): String {
         if (!apiKey.isNullOrBlank()) domain.login(apiKey.trim())
         val result = domain.sync(silent = false)
