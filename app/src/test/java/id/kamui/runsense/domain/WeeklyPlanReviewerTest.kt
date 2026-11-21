@@ -51,4 +51,27 @@ class WeeklyPlanReviewerTest {
         assertEquals(10.0, review.nextWeekTargetKm, 0.001)
         assertEquals(0.0, review.actualKm, 0.001)
     }
+
+    @Test fun elevatedLoadReplacesOneQualitySessionWithEasyNextWeek() {
+        val monday = LocalDate.of(2026, 11, 16)
+        val plan = listOf(
+            PlannedSession(monday.plusDays(1), "Easy run", 4.0),
+            PlannedSession(monday.plusDays(2), "Interval", 5.0),
+            PlannedSession(monday.plusDays(5), "Tempo", 4.0),
+        )
+        val review = WeeklyPlanReviewer.evaluate(monday.plusDays(4), plan, emptyList(), emptyList(), summary(acwr = 1.45, readiness = 40))
+        assertTrue(review.nextWeekSessions.any { it.title.startsWith("Easy ringan (pengganti Interval)") })
+        assertEquals(11.7, review.nextWeekTargetKm, 0.001)
+    }
+
+    @Test fun closelySpacedQualitySessionsAreSeparatedInSuggestedWeek() {
+        val monday = LocalDate.of(2026, 11, 16)
+        val plan = listOf(
+            PlannedSession(monday.plusDays(1), "Interval", 4.0),
+            PlannedSession(monday.plusDays(3), "Tempo", 4.0),
+        )
+        val review = WeeklyPlanReviewer.evaluate(monday.plusDays(4), plan, emptyList(), emptyList(), summary())
+        assertTrue(review.nextWeekSessions[1].title.startsWith("Easy ringan (pengganti Tempo)"))
+    }
+
 }
