@@ -139,6 +139,11 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
             }
         } else weatherPermission.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
     }
+    LaunchedEffect(Unit) {
+        val permitted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (permitted && (weather == null || System.currentTimeMillis() - weather.fetchedAt > 6 * 60 * 60 * 1000L)) refreshWeather()
+    }
     val profile = remember(revision) { repository.profile() }
     val runWalk = remember(revision) { repository.runWalkSettings() }
     val planSettings = remember(revision) { repository.planSettings() }
