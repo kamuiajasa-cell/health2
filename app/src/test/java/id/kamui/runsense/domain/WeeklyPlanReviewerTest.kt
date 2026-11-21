@@ -39,7 +39,7 @@ class WeeklyPlanReviewerTest {
             ActivityRecord("a$i", p.date.atTime(7, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(), "run", 35.0, 5.0, 150)
         }
         val review = WeeklyPlanReviewer.evaluate(monday.plusDays(4), plan, runs, emptyList(), summary(acwr = 1.4, readiness = 42))
-        assertEquals("KURANGI TARGET 10%", review.adjustment)
+        assertEquals("KURANGI TARGET 10% + RINGANKAN QUALITY", review.adjustment)
         assertEquals(9.0, review.nextWeekTargetKm, 0.001)
     }
 
