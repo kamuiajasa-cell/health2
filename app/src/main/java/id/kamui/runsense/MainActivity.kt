@@ -533,7 +533,7 @@ private fun ProgressScreen(
         Triple(activity, activity.durationMin / activity.distanceKm, activity.averageHr.toDouble())
     }.sortedBy { it.first.startedAt }
     val refHr = median(easy.map { it.third })
-    val normalized = if (refHr != null) easy.map { it.second * refHr / it.third } else emptyList()
+    val normalized = if (refHr != null && refHr > 0) easy.map { it.second * it.third / refHr } else emptyList()
     val half = normalized.size / 2
     val earlyPace = median(normalized.take(half))
     val latePace = median(normalized.drop(half))
@@ -1701,7 +1701,7 @@ private fun ProfileDialog(profile: AthleteProfile, onDismiss: () -> Unit, onSave
             NumberField("Berat badan (kg)", weight) { weight = it }
         } },
         confirmButton = { TextButton(onClick = { onSave(AthleteProfile(
-            rhr.toIntOrNull() ?: 60, max.toIntOrNull() ?: 185, lt.toIntOrNull() ?: 160,
+            rhr.toIntOrNull() ?: 63, max.toIntOrNull() ?: 185, lt.toIntOrNull() ?: 160,
             run {
                 val parts = pace.trim().replace(',', ':').split(":")
                 if (parts.size == 2) ((parts[0].toIntOrNull() ?: 6) * 60 + (parts[1].toIntOrNull() ?: 30)).coerceIn(120, 1200)
