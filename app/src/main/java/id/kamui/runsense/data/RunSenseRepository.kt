@@ -114,6 +114,20 @@ class RunSenseRepository(context: Context) {
             if (row.length() < 10) continue
             val start = row.optLong(0)
             val id = row.optString(9).ifBlank { "hw$start" }
+            if (row.optString(1) == "weight") {
+                val strengthItems = readArray("strength")
+                val exists = (0 until strengthItems.length()).any { strengthItems.optJSONObject(it)?.optString("id") == id }
+                if (!exists) {
+                    strengthItems.put(JSONObject().put("id", id)
+                        .put("date", dateFormat.format(Date(start)))
+                        .put("category", "full")
+                        .put("durationMin", row.optDouble(2).toInt())
+                        .put("level", 1)
+                        .put("completed", true))
+                    writeArray("strength", strengthItems)
+                }
+                continue
+            }
             val existed = byId.containsKey(id)
             val item = byId[id] ?: JSONObject()
             item.put("id", id)
