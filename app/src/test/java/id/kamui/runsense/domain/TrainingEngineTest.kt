@@ -127,4 +127,32 @@ class TrainingEngineTest {
     }
 
 
+
+    @Test fun meaningfulPainCheckinImmediatelyChangesReadinessAndRecommendation() {
+        val now = System.currentTimeMillis()
+        val run = ActivityRecord("pain", now - 60_000L, "run", 30.0, 4.0, 145, rpe = 6, feel = "normal", pain = 4)
+        val summary = TrainingEngine.summarize(listOf(run), emptyList(), emptyList(), AthleteProfile(), now)
+        assertEquals(58, summary.readiness)
+        assertTrue(summary.recommendation.contains("nyeri bermakna"))
+        assertTrue(summary.rationale.any { it.contains("nyeri >=4/10") })
+    }
+
+    @Test fun repeatedHighRpeCheckinsReduceReadinessWithoutSingleSessionOverreaction() {
+        val now = System.currentTimeMillis()
+        val runs = listOf(
+            ActivityRecord("r1", now - 60_000L, "run", 30.0, 4.0, 145, rpe = 9, feel = "sangat berat"),
+            ActivityRecord("r2", now - 2 * 86_400_000L, "run", 28.0, 3.5, 142, rpe = 8, feel = "berat")
+        )
+        val summary = TrainingEngine.summarize(runs, emptyList(), emptyList(), AthleteProfile(), now)
+        assertEquals(64, summary.readiness)
+        assertTrue(summary.recommendation.contains("terasa berat"))
+    }
+
+    @Test fun oldCheckinsDoNotChangeCurrentReadiness() {
+        val now = System.currentTimeMillis()
+        val old = ActivityRecord("old", now - 9 * 86_400_000L, "run", 30.0, 4.0, 145, rpe = 9, feel = "sangat berat", pain = 5)
+        val summary = TrainingEngine.summarize(listOf(old), emptyList(), emptyList(), AthleteProfile(), now)
+        assertNull(summary.readiness)
+    }
+
 }
