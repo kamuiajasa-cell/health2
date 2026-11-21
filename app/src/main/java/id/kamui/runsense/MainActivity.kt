@@ -188,22 +188,10 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
         ) { padding ->
             when (selected) {
                 RunTab.HOME -> HomeScreen(activities, summary, domainResult, weather, weatherMessage, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onRefreshWeather = { refreshWeather() })
-                RunTab.TRAINING -> TrainingScreen(activities, strength, profile, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
+                RunTab.TRAINING -> TrainingScreen(activities, strength, profile, domainResult, baseSnapshot, repository, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onCheckin = { checkinActivity = it })
                 RunTab.PROGRESS -> ProgressScreen(
                     activities, summary, domainResult, baseSnapshot, repository, strength, profile, Modifier.padding(padding),
-                    onCheckin = { checkinActivity = it },
-                    onLoadStream = { id ->
-                        scope.launch {
-                            syncBusy = true
-                            try {
-                                val loaded = withContext(Dispatchers.IO) { intervals.ensureStreamFor(id) }
-                                syncMessage = if (loaded) "Stream sesi berhasil dimuat." else "Stream tidak tersedia atau belum ada API key."
-                                changed()
-                            } catch (e: Exception) {
-                                syncMessage = "Gagal memuat stream: ${e.message}"
-                            } finally { syncBusy = false }
-                        }
-                    }
+                    onCheckin = { checkinActivity = it }
                 )
                 RunTab.COACH -> CoachScreen(activities, summary, strength, strengthTarget, parqAnswers, domainResult, baseSnapshot, planSettings, weather, weatherMessage, Modifier.padding(padding), onRefreshWeather = { refreshWeather() })
                 RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); intervals.ingestWatchJson(json); changed() }
@@ -366,11 +354,16 @@ private fun TrainingScreen(
     activities: List<ActivityRecord>,
     strength: List<StrengthRecord>,
     profile: AthleteProfile,
+    domainResult: com.runnow.domain.ProcessResult?,
+    snapshot: Snapshot?,
+    repository: RunSenseRepository,
     modifier: Modifier,
     onAdd: () -> Unit,
-    onStrength: () -> Unit
+    onStrength: () -> Unit,
+    onCheckin: (ActivityRecord) -> Unit
 ) {
     var filter by remember { mutableStateOf("week") }
+    var selectedActivity by remember { mutableStateOf<ActivityRecord?>(null) }
     val today = java.time.LocalDate.now()
     val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
     val visible = remember(activities, filter, today) {
@@ -419,7 +412,7 @@ private fun TrainingScreen(
         }
         SectionTitle("Riwayat aktivitas", "${visible.size} SESI")
         if (visible.isEmpty()) EmptyCard(if (filter == "week") "Belum ada aktivitas minggu ini." else if (filter == "month") "Belum ada aktivitas bulan ini." else "Belum ada aktivitas yang dicatat.")
-        else if (filter == "week") visible.forEach { ActivityCard(it, profile) }
+        else if (filter == "week") visible.forEach { ActivityCard(it, profile) { selectedActivity = it } }
         else {
             val grouped = visible.groupBy { activity ->
                 java.time.Instant.ofEpochMilli(activity.startedAt).atZone(java.time.ZoneId.systemDefault())
@@ -434,7 +427,7 @@ private fun TrainingScreen(
                     )
                     Text("${items.size} sesi · %.1f km".format(Locale.US, km), color = Muted, fontSize = 10.sp)
                 }
-                items.forEach { ActivityCard(it, profile) }
+                items.forEach { ActivityCard(it, profile) { selectedActivity = it } }
             }
         }
         SectionTitle("Riwayat strength", "${strength.size} CATATAN")
@@ -449,6 +442,48 @@ private fun TrainingScreen(
             )
         }
     }
+    selectedActivity?.let { activity ->
+        val domainItem = domainResult?.activities?.firstOrNull {
+            it.act.icuId == activity.id || it.act.lid == activity.id || it.act.start == activity.startedAt
+        }
+        AlertDialog(
+            onDismissRequest = { selectedActivity = null },
+            title = { Text("Analisa lari", color = White, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    Modifier.fillMaxWidth().heightIn(max = 540.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val stamp = SimpleDateFormat("EEEE, d MMM yyyy · HH:mm", Locale("id", "ID")).format(Date(activity.startedAt))
+                    Text(stamp, color = Muted, fontSize = 11.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        MetricCard("JARAK", "${"%.2f".format(Locale.US, activity.distanceKm)} km", Modifier.weight(1f))
+                        Spacer(Modifier.width(7.dp))
+                        MetricCard("DURASI", "${activity.durationMin.toInt()} mnt", Modifier.weight(1f))
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        MetricCard("PACE", if (activity.distanceKm > 0) pace(activity.durationMin / activity.distanceKm) else "—", Modifier.weight(1f))
+                        MetricCard("AVG HR", if (activity.averageHr > 0) "${activity.averageHr} bpm" else "—", Modifier.weight(1f))
+                        MetricCard("TRAINING LOAD", TrainingEngine.activityLoad(activity, profile).roundToInt().toString(), Modifier.weight(1f))
+                    }
+                    if (activity.rpe > 0 || activity.feel.isNotBlank() || activity.pain > 0) {
+                        Text("Check-in: RPE ${activity.rpe}/10 · ${activity.feel.ifBlank { "belum diisi" }} · nyeri ${activity.pain}/10", color = Muted, fontSize = 11.sp)
+                    }
+                    if (activity.type.equals("run", true) && domainItem != null) {
+                        SessionReviewCard(domainItem, snapshot, repository)
+                    } else if (activity.type.equals("run", true)) {
+                        EmptyCard("Analisa sesi belum tersedia di data sinkron. Periksa koneksi sinkronisasi dan coba sinkronkan kembali.")
+                    } else {
+                        EmptyCard("Analisa stream hanya tersedia untuk aktivitas lari.")
+                    }
+                    TextButton(onClick = { onCheckin(activity); selectedActivity = null }) {
+                        Text("Isi / ubah check-in setelah lari", color = Lime)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { selectedActivity = null }) { Text("Tutup") } }
+        )
+    }
 }
 
 @Composable
@@ -461,7 +496,6 @@ private fun ProgressScreen(
     strength: List<StrengthRecord>,
     profile: AthleteProfile,
     modifier: Modifier,
-    onLoadStream: (String) -> Unit,
     onCheckin: (ActivityRecord) -> Unit,
 ) {
     var rangeWeeks by remember { mutableIntStateOf(8) }
@@ -761,10 +795,6 @@ private fun ProgressScreen(
             }
             LinearProgressIndicator(progress = (km / (weekly.maxOfOrNull { it.second }?.coerceAtLeast(1.0) ?: 1.0)).toFloat().coerceIn(0f, 1f), modifier = Modifier.fillMaxWidth().height(5.dp), color = Lime.copy(alpha = .75f), trackColor = Color.White.copy(alpha = .08f))
         }
-        SectionTitle("Review sesi", "MESIN RUNSENSE")
-        val runs = domainResult?.activities?.filter { it.act.kind == com.runnow.domain.ActKind.RUN }?.take(5).orEmpty()
-        if (runs.isEmpty()) EmptyCard("Review sesi akan muncul setelah aktivitas lari tersedia.")
-        else runs.forEach { SessionReviewCard(it, snapshot, repository, onLoadStream) }
         SectionTitle("Aktivitas periode ini", "CHECK-IN")
         if (periodActivities.isEmpty()) EmptyCard("Belum ada aktivitas pada rentang waktu ini.")
         else periodActivities.take(30).forEach { CheckinActivityCard(it, onCheckin) }
@@ -959,7 +989,7 @@ private fun HeartRateZoneChart(activities: List<ActivityRecord>, snapshot: Snaps
 }
 
 @Composable
-private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, repository: RunSenseRepository, onLoadStream: (String) -> Unit) {
+private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, repository: RunSenseRepository) {
     val review = remember(item.act, snapshot) { snapshot?.reviewRun(item.act) }
     val streamKey = item.act.icuId ?: item.act.lid
     val hasStream = snapshot?.streams?.containsKey(streamKey) == true
@@ -1000,10 +1030,7 @@ private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, repositor
                     }
                 }
             } else {
-                Text("Data kadens mentah belum tersedia. Sinkronkan jam atau muat stream Intervals.icu.", color = Muted, fontSize = 10.sp)
-            }
-            if (item.act.icuId != null && !hasStream) {
-                OutlinedButton(onClick = { onLoadStream(streamKey) }) { Text("Muat stream Intervals.icu") }
+                Text("Stream sesi belum tersedia. Data stream diambil otomatis saat sinkronisasi; coba sinkronkan ulang jika sesi ini belum memiliki stream.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
             }
         }
     }
@@ -1418,11 +1445,24 @@ private fun CheckinActivityCard(activity: ActivityRecord, onCheckin: (ActivityRe
 }
 
 @Composable
-private fun ActivityCard(a: ActivityRecord, profile: AthleteProfile = AthleteProfile()) {
+private fun ActivityCard(a: ActivityRecord, profile: AthleteProfile = AthleteProfile(), onClick: () -> Unit = {}) {
     val stamp = SimpleDateFormat("dd MMM · HH:mm", Locale("id", "ID")).format(Date(a.startedAt))
-    InfoCard("${a.type.replaceFirstChar { it.uppercase() }} · $stamp",
-        "${a.durationMin} menit · ${"%.2f".format(Locale.US, a.distanceKm)} km · HR ${if (a.averageHr > 0) a.averageHr else "—"}",
-        "TL ${TrainingEngine.activityLoad(a, profile).roundToInt()}")
+    Surface(
+        color = Panel,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("${a.type.replaceFirstChar { it.uppercase() }} · $stamp", color = White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("${a.durationMin} menit · ${"%.2f".format(Locale.US, a.distanceKm)} km · HR ${if (a.averageHr > 0) a.averageHr else "—"}", color = Muted, fontSize = 11.sp)
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("TL ${TrainingEngine.activityLoad(a, profile).roundToInt()}", color = Lime, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("LIHAT ›", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
 }
 
 @Composable
