@@ -111,6 +111,46 @@ class NativeIntervalsRuntime(context: Context) {
         return local.streamPoints(activityId).isNotEmpty()
     }
 
+    suspend fun createPlannedWorkout(name: String, date: String, description: String, movingTimeSeconds: Int? = null): String = withContext(Dispatchers.IO) {
+        val key = domain.apiKey?.takeIf { it.isNotBlank() && it != "demo" }
+            ?: throw IllegalStateException("Hubungkan Intervals.icu dengan API key terlebih dahulu.")
+        val parsedDate = runCatching { java.time.LocalDate.parse(date).toString() }.getOrNull()
+            ?: throw IllegalArgumentException("Tanggal harus berformat YYYY-MM-DD.")
+        require(name.isNotBlank()) { "Nama latihan belum diisi." }
+        require(description.isNotBlank()) { "Susunan latihan masih kosong." }
+        val body = org.json.JSONObject()
+            .put("category", "WORKOUT")
+            .put("start_date_local", "${parsedDate}T00:00:00")
+            .put("type", "Run")
+            .put("name", name.take(120))
+            .put("description", description)
+        movingTimeSeconds?.takeIf { it > 0 }?.let { body.put("moving_time", it) }
+        val connection = URL("https://intervals.icu/api/v1/athlete/0/events").openConnection() as HttpURLConnection
+        try {
+            val auth = "Basic " + java.util.Base64.getEncoder()
+                .encodeToString("API_KEY:$key".toByteArray(Charsets.UTF_8))
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 30_000
+            connection.doOutput = true
+            connection.setRequestProperty("Authorization", auth)
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            val status = connection.responseCode
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            if (status !in 200..299) {
+                val detail = response.take(240)
+                throw IllegalStateException("Intervals.icu menolak workout (HTTP $status)${if (detail.isNotBlank()) ": $detail" else ""}")
+            }
+            val eventId = runCatching { org.json.JSONObject(response).optLong("id", 0L) }.getOrDefault(0L)
+            if (eventId > 0) "Workout berhasil dikirim ke kalender Intervals.icu (ID $eventId)." else "Workout berhasil dikirim ke kalender Intervals.icu."
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     suspend fun sync(apiKey: String? = null): String {
         if (!apiKey.isNullOrBlank()) domain.login(apiKey.trim())
         val result = domain.sync(silent = false)
