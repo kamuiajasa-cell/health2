@@ -6,6 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -96,7 +98,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                 RunTab.HOME -> HomeScreen(activities, summary, domainResult, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
                 RunTab.TRAINING -> TrainingScreen(activities, strength, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
                 RunTab.PROGRESS -> ProgressScreen(
-                    activities, summary, domainResult, baseSnapshot, Modifier.padding(padding),
+                    activities, summary, domainResult, baseSnapshot, repository, Modifier.padding(padding),
                     onLoadStream = { id ->
                         scope.launch {
                             syncBusy = true
@@ -162,7 +164,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
 
 @Composable
 private fun Page(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
+    Column(modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 18.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
 }
 
 @Composable
@@ -211,6 +213,7 @@ private fun ProgressScreen(
     summary: TrainingSummary,
     domainResult: com.runnow.domain.ProcessResult?,
     snapshot: Snapshot?,
+    repository: RunSenseRepository,
     modifier: Modifier,
     onLoadStream: (String) -> Unit,
 ) {
@@ -235,7 +238,7 @@ private fun ProgressScreen(
         SectionTitle("Review sesi", "MESIN RUNSENSE")
         val runs = domainResult?.activities?.filter { it.act.kind == com.runnow.domain.ActKind.RUN }?.take(5).orEmpty()
         if (runs.isEmpty()) EmptyCard("Review sesi akan muncul setelah aktivitas lari tersedia.")
-        else runs.forEach { SessionReviewCard(it, snapshot, onLoadStream) }
+        else runs.forEach { SessionReviewCard(it, snapshot, repository, onLoadStream) }
         SectionTitle("Aktivitas 28 hari", "TERBARU")
         if (last28.isEmpty()) EmptyCard("Data grafik dan tren akan terbentuk setelah aktivitas dicatat.")
         else last28.sortedByDescending { it.startedAt }.forEach { ActivityCard(it) }
@@ -243,10 +246,13 @@ private fun ProgressScreen(
 }
 
 @Composable
-private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, onLoadStream: (String) -> Unit) {
+private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, repository: RunSenseRepository, onLoadStream: (String) -> Unit) {
     val review = remember(item.act, snapshot) { snapshot?.reviewRun(item.act) }
     val streamKey = item.act.icuId ?: item.act.lid
     val hasStream = snapshot?.streams?.containsKey(streamKey) == true
+    val rawPoints = remember(item.act.lid, snapshot) { repository.streamPoints(streamKey) }
+    val cadence = remember(rawPoints) { CadenceAnalyzer.analyze(rawPoints, 5) }
+    var cadenceExpanded by remember(item.act.lid) { mutableStateOf(false) }
     Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text(item.title, color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -258,10 +264,33 @@ private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, onLoadStr
                     Text("• ${note.text}", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
                 }
             }
+            if (rawPoints.isNotEmpty()) {
+                Divider(color = Color.White.copy(alpha = .08f))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text("Kadens per 5 detik", color = Lime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("${cadence.windows.size} segmen · ${cadence.runningWindows} lari · ${cadence.walkingWindows} jalan", color = Muted, fontSize = 10.sp)
+                    }
+                    TextButton(onClick = { cadenceExpanded = !cadenceExpanded }) {
+                        Text(if (cadenceExpanded) "Tutup" else "Lihat")
+                    }
+                }
+                Text("Rata-rata kadens saat lari: ${cadence.averageRunningCadence?.let { "$it spm" } ?: "—"}", color = White, fontSize = 11.sp)
+                if (cadenceExpanded) {
+                    cadence.windows.forEach { w ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(CadenceAnalyzer.formatTime(w.startSec), color = Muted, fontSize = 10.sp)
+                            Text(w.cadenceSpm?.let { "${it.roundToInt()} spm" } ?: "—", color = White, fontSize = 10.sp)
+                            Text(w.mode, color = if (w.mode == "Lari") Lime else Muted, fontSize = 10.sp)
+                            Text(CadenceAnalyzer.formatPace(w.paceSecPerKm), color = Muted, fontSize = 10.sp)
+                        }
+                    }
+                }
+            } else {
+                Text("Data kadens mentah belum tersedia. Sinkronkan jam atau muat stream Intervals.icu.", color = Muted, fontSize = 10.sp)
+            }
             if (item.act.icuId != null && !hasStream) {
                 OutlinedButton(onClick = { onLoadStream(streamKey) }) { Text("Muat stream Intervals.icu") }
-            } else {
-                Text(if (hasStream) "Data stream tersedia untuk review." else "Stream detail tidak tersedia untuk sesi ini.", color = Muted, fontSize = 10.sp)
             }
         }
     }
