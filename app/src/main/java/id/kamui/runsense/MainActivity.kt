@@ -634,7 +634,7 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
                 }
             }
         } else if (parqAnswered < 7) {
-            InfoCard("Skrining PAR-Q belum lengkap", "$parqAnswered dari 7 pertanyaan terisi. Lengkapi di Setelan agar Coach dapat menampilkan status skrining.", "BELUM LENGKAP")
+            InfoCard("Skrining PAR-Q belum lengkap", "$parqAnswered dari 7 pertanyaan terisi. Lengkapi di Saya agar Coach dapat menampilkan status skrining.", "BELUM LENGKAP")
         } else {
             InfoCard("Skrining PAR-Q", "Tidak ada jawaban YA pada skrining terakhir. Ini bukan jaminan bebas risiko atau izin medis.", "TERISI")
         }
