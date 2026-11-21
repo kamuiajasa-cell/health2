@@ -162,8 +162,8 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
         if (showActivity) ActivityDialog(onDismiss = { showActivity = false }, onSave = { type, duration, distance, hr, load, quality, rpe, feel, pain ->
             repository.addActivity(type, duration, distance, hr, load, quality, rpe, feel, pain); showActivity = false; changed()
         })
-        if (showStrength) StrengthDialog(onDismiss = { showStrength = false }, onSave = { category, duration, level, done ->
-            repository.addStrength(category, duration, level, done); showStrength = false; changed()
+        if (showStrength) StrengthDialog(onDismiss = { showStrength = false }, onSave = { category, duration, level, done, exercise, sets, reps, load ->
+            repository.addStrength(category, duration, level, done, exercise, sets, reps, load); showStrength = false; changed()
         })
         if (showStrengthTarget) StrengthTargetDialog(strengthTarget, onDismiss = { showStrengthTarget = false }, onSave = { days -> repository.saveWeeklyStrengthTarget(days); showStrengthTarget = false; changed() })
         if (showParq) ParqDialog(parqAnswers, onDismiss = { showParq = false }, onSave = { answers -> repository.saveParqAnswers(answers); showParq = false; changed() })
@@ -258,7 +258,7 @@ private fun TrainingScreen(activities: List<ActivityRecord>, strength: List<Stre
         item { SectionTitle("Riwayat strength", "${strength.size} CATATAN") }
         if (strength.isEmpty()) item { EmptyCard("Belum ada sesi strength tersimpan.") }
         items(strength.take(30), key = { it.id }) { s ->
-            InfoCard(strengthLabel(s.category), "${s.date} · ${s.durationMin} menit · level ${s.level}", if (s.completed) "SELESAI" else "SKIP")
+            InfoCard(strengthLabel(s.category), "${s.date} · ${s.durationMin} menit · level ${s.level}" + (if (s.exercise.isNotBlank()) " · ${s.exercise}: ${s.sets}×${s.reps}" + (if (s.resistanceKg > 0) " @ ${s.resistanceKg} kg" else "") else ""), if (s.completed) "SELESAI" else "SKIP")
         }
     }
 }
@@ -858,23 +858,39 @@ private fun SessionCheckinDialog(
 }
 
 @Composable
-private fun StrengthDialog(onDismiss: () -> Unit, onSave: (String, Int, Int, Boolean) -> Unit) {
+private fun StrengthDialog(onDismiss: () -> Unit, onSave: (String, Int, Int, Boolean, String, Int, Int, Double) -> Unit) {
     var category by remember { mutableStateOf("leg") }
+    var exercise by remember { mutableStateOf("Squat") }
     var duration by remember { mutableStateOf("20") }
     var level by remember { mutableStateOf("1") }
+    var sets by remember { mutableStateOf("3") }
+    var reps by remember { mutableStateOf("10") }
+    var load by remember { mutableStateOf("0") }
+    val exercises = when (category) {
+        "leg" -> listOf("Squat", "Lunge", "Step-up", "Wall sit")
+        "hip" -> listOf("Glute bridge", "Clamshell", "Hip thrust", "Single-leg bridge")
+        "calf" -> listOf("Calf raise", "Single-leg calf raise", "Tibialis raise")
+        "core" -> listOf("Plank", "Side plank", "Dead bug", "Bird dog")
+        else -> listOf("A-skip", "High knees", "Butt kicks", "Drill teknik")
+    }
+    if (exercise !in exercises) exercise = exercises.first()
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Catat strength") },
-        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        text = { Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Kelompok otot", color = Muted)
             listOf("leg" to "Kaki", "hip" to "Pinggul", "calf" to "Betis", "core" to "Core", "drill" to "Drill").forEach { (key, label) ->
                 FilterChip(category == key, { category = key }, label = { Text(label) })
             }
+            Text("Gerakan", color = Muted)
+            exercises.forEach { name -> FilterChip(exercise == name, { exercise = name }, label = { Text(name) }) }
             NumberField("Durasi (menit)", duration) { duration = it }
-            NumberField("Level 0–4", level) { level = it }
+            NumberField("Set", sets) { sets = it }
+            NumberField("Repetisi per set", reps) { reps = it }
+            NumberField("Beban eksternal (kg, opsional)", load) { load = it }
+            NumberField("Level effort 0–4", level) { level = it }
         } },
-        confirmButton = { TextButton(onClick = { onSave(category, (duration.toIntOrNull() ?: 0).coerceAtLeast(0), (level.toIntOrNull() ?: 0).coerceIn(0,4), true) }) { Text("Sudah") } },
-        dismissButton = { TextButton(onClick = { onSave(category, (duration.toIntOrNull() ?: 0), (level.toIntOrNull() ?: 0).coerceIn(0,4), false) }) { Text("Skip") } })
+        confirmButton = { TextButton(onClick = { onSave(category, (duration.toIntOrNull() ?: 0).coerceAtLeast(0), (level.toIntOrNull() ?: 0).coerceIn(0,4), true, exercise, (sets.toIntOrNull() ?: 0).coerceAtLeast(0), (reps.toIntOrNull() ?: 0).coerceAtLeast(0), (load.toDoubleOrNull() ?: 0.0).coerceAtLeast(0.0)) }) { Text("Simpan sesi") } },
+        dismissButton = { TextButton(onClick = { onSave(category, (duration.toIntOrNull() ?: 0), (level.toIntOrNull() ?: 0).coerceIn(0,4), false, exercise, 0, 0, 0.0) }) { Text("Skip") } })
 }
-
 
 @Composable
 private fun StrengthTargetDialog(current: Int, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
