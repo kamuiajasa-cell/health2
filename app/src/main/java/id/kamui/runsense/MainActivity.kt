@@ -276,6 +276,7 @@ private fun ProgressScreen(
         MetricCard("BEBAN 7 HARI", fmt(summary.acuteLoad), Modifier.fillMaxWidth())
         SectionTitle("Volume harian", "7 HARI")
         WeeklyDistanceChart(activities)
+        TrainingTrendChart(activities)
         SectionTitle("Review sesi", "MESIN RUNSENSE")
         val runs = domainResult?.activities?.filter { it.act.kind == com.runnow.domain.ActKind.RUN }?.take(5).orEmpty()
         if (runs.isEmpty()) EmptyCard("Review sesi akan muncul setelah aktivitas lari tersedia.")
@@ -321,6 +322,80 @@ private fun WeeklyDistanceChart(activities: List<ActivityRecord>) {
                 dates.forEach { date ->
                     Text(date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale("id", "ID")),
                         color = if (date == today) Lime else Muted, fontSize = 9.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrainingTrendChart(activities: List<ActivityRecord>) {
+    var metric by remember { mutableStateOf("pace") }
+    val today = java.time.LocalDate.now()
+    val currentMonday = today.minusDays((today.dayOfWeek.value - 1).toLong())
+    val weeks = (3 downTo 0).map { offset ->
+        val start = currentMonday.minusWeeks(offset.toLong())
+        val end = start.plusWeeks(1)
+        val runs = activities.filter { activity ->
+            if (!activity.type.equals("run", true)) return@filter false
+            val date = java.time.Instant.ofEpochMilli(activity.startedAt)
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            !date.isBefore(start) && date.isBefore(end)
+        }
+        val km = runs.sumOf { it.distanceKm }
+        val paceValue = if (km > 0) runs.sumOf { it.durationMin } / km else null
+        val hrValues = runs.filter { it.averageHr > 0 }.map { it.averageHr }
+        val hrValue = hrValues.takeIf { it.isNotEmpty() }?.average()
+        Triple(start, paceValue, hrValue)
+    }
+    val values = weeks.map { if (metric == "pace") it.second else it.third }
+    val valid = values.filterNotNull()
+    val minValue = valid.minOrNull() ?: 0.0
+    val maxValue = valid.maxOrNull() ?: 1.0
+    val range = (maxValue - minValue).coerceAtLeast(if (metric == "pace") 0.15 else 3.0)
+    Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text("Tren 4 minggu", color = White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(if (metric == "pace") "Pace rata-rata lari (menit/km)" else "Detak jantung rata-rata (bpm)", color = Muted, fontSize = 10.sp)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    FilterChip(selected = metric == "pace", onClick = { metric = "pace" }, label = { Text("Pace") })
+                    FilterChip(selected = metric == "hr", onClick = { metric = "hr" }, label = { Text("HR") })
+                }
+            }
+            if (valid.isEmpty()) {
+                Text("Belum cukup data lari untuk membentuk tren.", color = Muted, fontSize = 11.sp)
+            } else {
+                Canvas(Modifier.fillMaxWidth().height(112.dp)) {
+                    val slot = size.width / 4f
+                    val barWidth = slot * .42f
+                    values.forEachIndexed { index, value ->
+                        if (value != null) {
+                            val normalized = ((value - minValue) / range).toFloat().coerceIn(0f, 1f)
+                            val height = (0.28f + normalized * .68f) * size.height
+                            val left = index * slot + (slot - barWidth) / 2f
+                            drawRoundRect(
+                                color = if (index == 3) Lime else Lime.copy(alpha = .38f),
+                                topLeft = Offset(left, size.height - height),
+                                size = Size(barWidth, height),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f, 8f)
+                            )
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    weeks.forEachIndexed { index, week ->
+                        val value = values[index]
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("M${index + 1}", color = Muted, fontSize = 9.sp)
+                            Text(
+                                value?.let { if (metric == "pace") pace(it) else "${it.roundToInt()} bpm" } ?: "—",
+                                color = if (index == 3) Lime else White, fontSize = 9.sp, fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             }
         }
