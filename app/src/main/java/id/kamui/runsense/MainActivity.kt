@@ -87,11 +87,12 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     MaterialTheme(colorScheme = darkColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Ink, onBackground = White, onSurface = White)) {
         Scaffold(
             containerColor = Ink,
+            topBar = { AppTopBar(selected) },
             bottomBar = {
-                NavigationBar(containerColor = Color(0xFF111410), contentColor = White) {
+                NavigationBar(containerColor = Color(0xFF111410), contentColor = White, tonalElevation = 0.dp) {
                     RunTab.entries.forEach { tab ->
                         NavigationBarItem(selected = selected == tab, onClick = { selected = tab },
-                            icon = { Text(tab.mark, fontSize = 19.sp) }, label = { Text(tab.label, fontSize = 10.sp) },
+                            icon = { Text(tab.mark, fontSize = 17.sp) }, label = { Text(tab.label, fontSize = 9.sp, maxLines = 1) },
                             colors = NavigationBarItemDefaults.colors(selectedIconColor = Lime, selectedTextColor = Lime,
                                 indicatorColor = Lime.copy(alpha = .13f), unselectedIconColor = Muted, unselectedTextColor = Muted))
                     }
@@ -167,8 +168,34 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
 }
 
 @Composable
+private fun AppTopBar(selected: RunTab) {
+    Surface(color = Ink, tonalElevation = 0.dp) {
+        Row(
+            Modifier.fillMaxWidth().height(62.dp).padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(color = Lime, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(36.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("R", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text("RUNSENSE", color = Lime, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp)
+                    Text(selected.label, color = White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Surface(color = Panel, shape = RoundedCornerShape(50)) {
+                Text("NATIVE", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+            }
+        }
+    }
+}
+
+@Composable
 private fun Page(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 18.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
+    Column(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
 }
 
 @Composable
@@ -301,6 +328,42 @@ private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, repositor
 }
 
 @Composable
+private fun WeeklyReviewCard(review: WeeklyReview) {
+    val ratio = if (review.targetKm > 0) (review.actualKm / review.targetKm).coerceIn(0.0, 1.0).toFloat() else 0f
+    Surface(color = Panel, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+            Text("RINGKASAN PELAKSANAAN", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("%.1f km".format(Locale.US, review.actualKm), color = Lime, fontSize = 30.sp, fontWeight = FontWeight.Black)
+                    Text("realisasi hingga hari ini", color = Muted, fontSize = 10.sp)
+                }
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("%.1f km".format(Locale.US, review.targetKm), color = White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text("target yang jatuh tempo", color = Muted, fontSize = 10.sp)
+                }
+            }
+            LinearProgressIndicator(progress = ratio, modifier = Modifier.fillMaxWidth().height(7.dp), color = Lime, trackColor = Color.White.copy(alpha = .10f))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Kepatuhan sesi: ${review.adherencePercent?.let { "$it%" } ?: "belum ada sesi jatuh tempo"}", color = White, fontSize = 11.sp)
+                Text("${review.completedSessions}/${review.dueSessions} selesai", color = Muted, fontSize = 10.sp)
+            }
+            Divider(color = Color.White.copy(alpha = .08f))
+            Text("ARAH MINGGU DEPAN", color = Lime, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text(review.adjustment, color = White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(review.rationale, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Target rencana berikutnya", color = Muted, fontSize = 10.sp)
+                Text("%.1f km".format(Locale.US, review.nextWeekTargetKm), color = Lime, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+            if (review.extraKm > 0.2) {
+                Text("Ada %.1f km di luar target harian. Pastikan penambahan spontan ini tidak menumpuk dengan sesi berat.".format(Locale.US, review.extraKm), color = Color(0xFFFFC16B), fontSize = 10.sp, lineHeight = 15.sp)
+            }
+        }
+    }
+}
+
+@Composable
 private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, modifier: Modifier) {
     Page(modifier) {
         Text("RunSense Coach", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
@@ -332,27 +395,33 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
                 color = Muted, fontSize = 11.sp, lineHeight = 16.sp
             )
         }
-        SectionTitle("Rencana mingguan", "DARI RUNSENSE")
+        SectionTitle("Rencana vs realisasi", "MINGGU INI")
         if (snapshot == null || !snapshot.hasPlan()) {
-            EmptyCard("Belum ada rencana mingguan tersimpan di profil RunSense. Coach tetap mengevaluasi beban aktual, tetapi belum bisa membandingkan realisasi dengan target harian.")
+            EmptyCard("Belum ada rencana mingguan tersimpan di profil RunSense. Setelah rencana tersedia, Coach akan membandingkan target harian dengan kilometer aktual dan strength yang selesai.")
         } else {
             val today = java.time.LocalDate.parse(snapshot.ymd())
             val monday = today.minusDays((today.dayOfWeek.value + 6).toLong() % 7L)
-            PLAN_DAYS.forEach { day ->
-                val plan = snapshot.planOf(day)
-                val plannedDate = monday.plusDays(if (day == 0) 6 else (day - 1).toLong())
-                val dayName = listOf("Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab")[day]
-                val label = plan?.t?.replaceFirstChar { it.uppercase() } ?: "Pemulihan / fleksibel"
-                val km = if (plan != null && plan.km > 0) " · %.1f km".format(Locale.US, plan.km) else ""
-                val dayStrength = strength.filter { it.date == plannedDate.toString() && it.completed }
-                val strengthNote = if (dayStrength.isNotEmpty()) " · Strength selesai: " + dayStrength.joinToString { strengthLabel(it.category) } else ""
-                InfoCard(dayName, "$label$km$strengthNote", if (dayStrength.any { it.category in setOf("leg", "calf", "hip", "drill") }) "STRENGTH TERCATAT" else "RENCANA")
-                if (plan != null && !plannedDate.isBefore(today)) {
-                    val advice = TrainingEngine.advisePlannedSession(plan.t, plannedDate, activities, strength, summary)
-                    if (advice != null) InfoCard("Saran Coach · $dayName", advice.detail, advice.status)
+            val plannedSessions = PLAN_DAYS.mapNotNull { day ->
+                snapshot.planOf(day)?.let { p ->
+                    PlannedSession(monday.plusDays(if (day == 0) 6 else (day - 1).toLong()), p.t, p.km)
                 }
             }
-            Text("Rencana ditampilkan dari konfigurasi mingguan RunSense. Beban strength yang selesai tetap masuk ke evaluasi Coach; catatan strength pada hari yang sama ditandai agar tidak luput saat meninjau jadwal.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+            val weekReview = WeeklyPlanReviewer.evaluate(today, plannedSessions, activities, strength, summary)
+            WeeklyReviewCard(weekReview)
+            SectionTitle("Rincian per hari", "TARGET · AKTUAL")
+            weekReview.days.forEach { day ->
+                val dayName = day.date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale("id", "ID"))
+                val target = if (day.targetKm > 0) "target %.1f km".format(Locale.US, day.targetKm) else "target sesi"
+                val actual = if (day.actualKm > 0) "aktual %.1f km".format(Locale.US, day.actualKm) else "belum ada lari"
+                val dayStrength = strength.filter { it.date == day.date.toString() && it.completed }
+                val extra = if (dayStrength.isNotEmpty()) " · strength: " + dayStrength.joinToString { strengthLabel(it.category) } else ""
+                InfoCard("$dayName · ${day.date.dayOfMonth}/${day.date.monthValue}", "${day.title} · $target · $actual$extra", day.status)
+                if (!day.date.isBefore(today)) {
+                    val advice = TrainingEngine.advisePlannedSession(day.title, day.date, activities, strength, summary)
+                    if (advice != null) InfoCard("Catatan Coach · $dayName", advice.detail, advice.status)
+                }
+            }
+            Text("Coach membaca sesi lari yang tersimpan dan strength yang ditandai selesai. Kilometer yang terlewat tidak dipindahkan otomatis; saran minggu depan mempertimbangkan konsistensi, ACWR, readiness, dan beban kaki.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
         }
         SectionTitle("Alasan rekomendasi", "TRANSPARAN")
         summary.rationale.forEachIndexed { index, reason -> InfoCard("Sinyal ${index + 1}", reason, "DATA") }
