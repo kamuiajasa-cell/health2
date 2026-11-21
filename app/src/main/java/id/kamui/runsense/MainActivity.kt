@@ -534,10 +534,11 @@ private fun ProgressScreen(
     val earlyPace = median(normalized.take(half))
     val latePace = median(normalized.drop(half))
     val efficiencyChange = if (earlyPace != null && latePace != null && earlyPace > 0) (earlyPace - latePace) / earlyPace * 100 else null
+    val efficiencyDeltaValue = efficiencyChange ?: 0.0
     val efficiencyStatus = when {
         normalized.size < 4 -> "Belum cukup data"
-        efficiencyChange!! > 1.5 -> "Membaik"
-        efficiencyChange < -1.5 -> "Menurun"
+        efficiencyDeltaValue > 1.5 -> "Membaik"
+        efficiencyDeltaValue < -1.5 -> "Menurun"
         else -> "Stabil"
     }
     val efficiencyRows = buildList {
@@ -618,10 +619,11 @@ private fun ProgressScreen(
         DurSample(activity.startedAt, drift, hrDrift, drop)
     }
     val effDrop = median(durability.mapNotNull { it.efficiencyDrop })
+    val durabilityDropValue = effDrop ?: 0.0
     val durabilityStatus = when {
         durability.size < 3 -> "Belum cukup data"
-        effDrop!! < 3 -> "Stabil"
-        effDrop < 6 -> "Mulai turun"
+        durabilityDropValue < 3 -> "Stabil"
+        durabilityDropValue < 6 -> "Mulai turun"
         else -> "Perlu perhatian"
     }
     val durabilityRows = buildList {
