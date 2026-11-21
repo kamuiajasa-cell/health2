@@ -35,6 +35,21 @@ class RunSenseRepository(context: Context) {
         writeArray("activities", a)
     }
 
+    fun updateActivityCheckin(id: String, rpe: Int, feel: String, pain: Int) {
+        val old = readArray("activities")
+        val next = JSONArray()
+        for (i in 0 until old.length()) {
+            val item = old.optJSONObject(i) ?: continue
+            if (item.optString("id") == id) {
+                item.put("rpe", rpe.coerceIn(0, 10))
+                    .put("feel", feel)
+                    .put("pain", pain.coerceIn(0, 10))
+            }
+            next.put(item)
+        }
+        writeArray("activities", next)
+    }
+
     fun addStrength(category: String, duration: Int, level: Int, completed: Boolean) {
         val a = readArray("strength")
         a.put(JSONObject().put("id", UUID.randomUUID().toString()).put("date", dateFormat.format(Date())).put("category", category).put("durationMin", duration).put("level", level).put("completed", completed))
