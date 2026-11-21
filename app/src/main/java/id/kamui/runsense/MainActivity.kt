@@ -128,7 +128,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                         }
                     }
                 )
-                RunTab.COACH -> CoachScreen(activities, summary, strength, domainResult, baseSnapshot, planSettings, Modifier.padding(padding))
+                RunTab.COACH -> CoachScreen(activities, summary, strength, strengthTarget, domainResult, baseSnapshot, planSettings, Modifier.padding(padding))
                 RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); intervals.ingestWatchJson(json); changed() }
                 RunTab.SETTINGS -> SettingsScreen(
                     profile, wellness, Modifier.padding(padding),
@@ -508,7 +508,7 @@ private fun WeeklyReviewCard(review: WeeklyReview) {
 }
 
 @Composable
-private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, planSettings: com.runnow.domain.Settings, modifier: Modifier) {
+private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, strengthTarget: Int, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, planSettings: com.runnow.domain.Settings, modifier: Modifier) {
     Page(modifier) {
         Text("RunSense Coach", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
         Text("Evaluasi beban, pemulihan, dan strength", color = Muted, fontSize = 13.sp)
@@ -542,6 +542,9 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
             }
             Text("RPE tinggi berulang atau nyeri yang bermakna akan menurunkan target minggu depan. Check-in tidak menggantikan pemeriksaan medis.", color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
         }
+        val weekStart = java.time.LocalDate.now().let { it.minusDays((it.dayOfWeek.value - 1).toLong()) }
+        val strengthDaysThisWeek = strength.filter { it.completed && runCatching { java.time.LocalDate.parse(it.date) }.getOrNull()?.let { date -> !date.isBefore(weekStart) && !date.isAfter(weekStart.plusDays(6)) } == true }.map { it.date }.distinct().size
+        InfoCard("Target strength mingguan", "$strengthDaysThisWeek / $strengthTarget hari tercapai", if (strengthDaysThisWeek >= strengthTarget && strengthTarget > 0) "TARGET TERCAPAI" else "PROGRES")
         SectionTitle("Strength yang dibaca Coach", "${strength.size} CATATAN")
         if (strength.isEmpty()) {
             EmptyCard("Belum ada catatan strength. Setelah sesi disimpan sebagai selesai, bebannya masuk ke evaluasi Coach.")
@@ -549,7 +552,7 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
             strength.sortedByDescending { it.date }.take(5).forEach { item ->
                 InfoCard(
                     strengthLabel(item.category),
-                    "${item.date} · ${item.durationMin} menit · level ${item.level}",
+                    "${item.date} · ${item.durationMin} menit · level ${item.level}" + (if (item.exercise.isNotBlank()) " · ${item.exercise} ${item.sets}×${item.reps}" + (if (item.resistanceKg > 0) " @ ${item.resistanceKg} kg" else "") else ""),
                     if (item.completed) "DIPERHITUNGKAN" else "BELUM SELESAI"
                 )
             }
