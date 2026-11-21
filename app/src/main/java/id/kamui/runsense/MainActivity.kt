@@ -505,6 +505,25 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
         InfoCard("Sesi quality 7 hari", "${summary.qualitySessions7d} sesi tercatat", if (summary.qualitySessions7d >= 2) "KUNCI QUALITY" else "TERPANTAU")
         InfoCard("Strength kaki 48 jam", "%.2f unit beban".format(Locale.US, summary.legStrengthLoad48h), if (summary.legStrengthLoad48h >= 3.4) "WASPADA BEBAN" else "NORMAL")
         InfoCard("Total strength 48 jam", "%.2f unit beban".format(Locale.US, summary.strengthLoad48h), if (summary.strengthLoad48h >= 4.0) "BEBAN TINGGI" else "TERPANTAU")
+        val recentCheckins = activities.filter {
+            it.type.equals("run", true) && (it.rpe > 0 || it.pain > 0 || it.feel.isNotBlank())
+        }.take(5)
+        SectionTitle("Respons tubuh setelah lari", "${recentCheckins.size} CHECK-IN")
+        if (recentCheckins.isEmpty()) {
+            EmptyCard("Belum ada check-in RPE/feel/nyeri. Saat mencatat lari, isi seberapa berat sesi terasa dan apakah ada nyeri. Data ini membantu Coach menyesuaikan beban mingguan.")
+        } else {
+            recentCheckins.forEach { item ->
+                val date = java.time.Instant.ofEpochMilli(item.startedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                val detail = "RPE ${item.rpe}/10 · feel ${item.feel.ifBlank { "—" }} · nyeri ${item.pain}/10"
+                val tag = when {
+                    item.pain >= 4 -> "NYERI TINGGI"
+                    item.pain >= 3 || item.rpe >= 8 || item.feel == "sangat berat" -> "PERLU HATI-HATI"
+                    else -> "TERCATAT"
+                }
+                InfoCard(date.toString(), detail, tag)
+            }
+            Text("RPE tinggi berulang atau nyeri yang bermakna akan menurunkan target minggu depan. Check-in tidak menggantikan pemeriksaan medis.", color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
+        }
         SectionTitle("Strength yang dibaca Coach", "${strength.size} CATATAN")
         if (strength.isEmpty()) {
             EmptyCard("Belum ada catatan strength. Setelah sesi disimpan sebagai selesai, bebannya masuk ke evaluasi Coach.")
