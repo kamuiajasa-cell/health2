@@ -50,6 +50,45 @@ class RunSenseRepository(context: Context) {
 
 
 
+    /** Native weekly plan and race target; kept separately from imported watch snapshots. */
+    fun planSettings(): com.runnow.domain.Settings {
+        val raw = prefs.getString("plan_settings", null) ?: return com.runnow.domain.Settings()
+        return try {
+            val root = JSONObject(raw)
+            val planJson = root.optJSONObject("plan") ?: JSONObject()
+            val plan = LinkedHashMap<Int, com.runnow.domain.PlanDay>()
+            for (key in planJson.keys()) {
+                val day = key.toIntOrNull() ?: continue
+                val item = planJson.optJSONObject(key) ?: continue
+                val title = item.optString("title").trim()
+                if (title.isNotBlank()) plan[day] = com.runnow.domain.PlanDay(title, item.optDouble("km", 0.0).coerceAtLeast(0.0))
+            }
+            com.runnow.domain.Settings(
+                style = root.optString("style", "moderate"),
+                plan = plan,
+                race = root.optString("race", ""),
+                raceDist = root.optDouble("raceDist", 0.0).coerceAtLeast(0.0),
+                raceGoal = root.optString("raceGoal", ""),
+                goal = root.optString("goal", "5K"),
+            )
+        } catch (_: Exception) { com.runnow.domain.Settings() }
+    }
+
+    fun savePlanSettings(settings: com.runnow.domain.Settings) {
+        val plan = JSONObject()
+        settings.plan.forEach { (day, item) ->
+            plan.put(day.toString(), JSONObject().put("title", item.t).put("km", item.km))
+        }
+        val json = JSONObject()
+            .put("style", settings.style)
+            .put("plan", plan)
+            .put("race", settings.race)
+            .put("raceDist", settings.raceDist)
+            .put("raceGoal", settings.raceGoal)
+            .put("goal", settings.goal)
+        prefs.edit().putString("plan_settings", json.toString()).apply()
+    }
+
     fun streamPoints(activityId: String): List<RawStreamPoint> {
         val watchRaw = prefs.getString("watch_stream_$activityId", null)
         if (watchRaw != null) {
