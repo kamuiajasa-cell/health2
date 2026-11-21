@@ -200,7 +200,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                     activities, summary, domainResult, baseSnapshot, repository, strength, profile, Modifier.padding(padding),
                     onCheckin = { checkinActivity = it }
                 )
-                RunTab.COACH -> CoachScreen(activities, summary, strength, strengthTarget, parqAnswers, domainResult, baseSnapshot, planSettings, weather, weatherMessage, Modifier.padding(padding), onRefreshWeather = { refreshWeather() })
+                RunTab.COACH -> CoachScreen(activities, summary, strength, strengthTarget, parqAnswers, domainResult, baseSnapshot, planSettings, weather, weatherMessage, Modifier.padding(padding), onRefreshWeather = { refreshWeather() }, onWorkout = { showWorkoutComposer = true })
                 RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); intervals.ingestWatchJson(json); changed() }
                 RunTab.PROFILE -> SettingsScreen(
                     profile, wellness, Modifier.padding(padding),
@@ -1145,7 +1145,7 @@ private fun WeeklyReviewCard(review: WeeklyReview) {
 }
 
 @Composable
-private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, strengthTarget: Int, parqAnswers: List<Boolean?>, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, planSettings: com.runnow.domain.Settings, weather: WeatherSnapshot?, weatherMessage: String, modifier: Modifier, onRefreshWeather: () -> Unit) {
+private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, strengthTarget: Int, parqAnswers: List<Boolean?>, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, planSettings: com.runnow.domain.Settings, weather: WeatherSnapshot?, weatherMessage: String, modifier: Modifier, onRefreshWeather: () -> Unit, onWorkout: () -> Unit) {
     Page(modifier) {
         PageHero("ADAPTIVE TRAINING", "Train with", "better insight.", "Evaluasi beban, pemulihan, strength, dan kondisi cuaca.")
         WeatherCard(weather, weatherMessage, onRefreshWeather)
@@ -1164,7 +1164,7 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
             InfoCard("Skrining PAR-Q", "Tidak ada jawaban YA pada skrining terakhir. Ini bukan jaminan bebas risiko atau izin medis.", "TERISI")
         }
         ReadinessCard(summary.readiness ?: domainResult?.athlete?.score, summary.recommendation)
-        CoachRecommendationCard(domainResult?.recommendation)
+        CoachRecommendationCard(domainResult?.recommendation, onWorkout)
         domainResult?.athlete?.let { athlete ->
             InfoCard("Tahap kapasitas", athlete.stageName, "STAGE ${athlete.stage}")
             InfoCard("Ambang laktat", "LTHR ${athlete.lthr ?: "—"} bpm · LT pace ${athlete.ltPace ?: "—"}", "AUTO / PROFIL")
