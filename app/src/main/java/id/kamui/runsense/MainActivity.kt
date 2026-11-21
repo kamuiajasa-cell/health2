@@ -144,8 +144,8 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                 )
             }
         }
-        if (showActivity) ActivityDialog(onDismiss = { showActivity = false }, onSave = { type, duration, distance, hr, load, quality ->
-            repository.addActivity(type, duration, distance, hr, load, quality); showActivity = false; changed()
+        if (showActivity) ActivityDialog(onDismiss = { showActivity = false }, onSave = { type, duration, distance, hr, load, quality, rpe, feel, pain ->
+            repository.addActivity(type, duration, distance, hr, load, quality, rpe, feel, pain); showActivity = false; changed()
         })
         if (showStrength) StrengthDialog(onDismiss = { showStrength = false }, onSave = { category, duration, level, done ->
             repository.addStrength(category, duration, level, done); showStrength = false; changed()
@@ -701,13 +701,16 @@ private fun EmptyCard(text: String) {
 }
 
 @Composable
-private fun ActivityDialog(onDismiss: () -> Unit, onSave: (String, Double, Double, Int, Double, Boolean) -> Unit) {
+private fun ActivityDialog(onDismiss: () -> Unit, onSave: (String, Double, Double, Int, Double, Boolean, Int, String, Int) -> Unit) {
     var type by remember { mutableStateOf("run") }
     var duration by remember { mutableStateOf("30") }
     var distance by remember { mutableStateOf("3") }
     var hr by remember { mutableStateOf("") }
     var load by remember { mutableStateOf("") }
     var quality by remember { mutableStateOf(false) }
+    var rpe by remember { mutableFloatStateOf(5f) }
+    var feel by remember { mutableStateOf("sesuai") }
+    var pain by remember { mutableFloatStateOf(0f) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Catat aktivitas") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -719,11 +722,31 @@ private fun ActivityDialog(onDismiss: () -> Unit, onSave: (String, Double, Doubl
             NumberField("Rata-rata HR (opsional)", hr) { hr = it }
             NumberField("Training load eksternal (opsional)", load) { load = it }
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(quality, { quality = it }); Text("Sesi quality / intensitas") }
+            if (type == "run") {
+                Divider(color = Color.White.copy(alpha = .12f))
+                Text("Check-in setelah lari", color = Lime, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text("RPE · seberapa berat sesi terasa?  ${rpe.roundToInt()}/10", color = White, fontSize = 11.sp)
+                Slider(value = rpe, onValueChange = { rpe = it }, valueRange = 0f..10f, steps = 9)
+                Text("Bagaimana rasanya dibanding perkiraan?", color = White, fontSize = 11.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    listOf("lebih ringan", "sesuai").forEach { item ->
+                        FilterChip(selected = feel == item, onClick = { feel = item }, label = { Text(item, fontSize = 9.sp) })
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    listOf("lebih berat", "sangat berat").forEach { item ->
+                        FilterChip(selected = feel == item, onClick = { feel = item }, label = { Text(item, fontSize = 9.sp) })
+                    }
+                }
+                Text("Nyeri saat/ setelah lari: ${pain.roundToInt()}/10", color = White, fontSize = 11.sp)
+                Slider(value = pain, onValueChange = { pain = it }, valueRange = 0f..10f, steps = 9)
+                Text("0 = tidak nyeri · 10 = nyeri sangat berat. Hentikan latihan bila nyeri mengganggu gerak.", color = Muted, fontSize = 10.sp)
+            }
         } },
         confirmButton = { TextButton(onClick = {
             val d = duration.toDoubleOrNull() ?: 0.0
             val km = distance.toDoubleOrNull() ?: 0.0
-            if (d > 0 && (type == "walk" || km > 0)) onSave(type, d, km, hr.toIntOrNull() ?: 0, load.toDoubleOrNull() ?: 0.0, quality)
+            if (d > 0 && (type == "walk" || km > 0)) onSave(type, d, km, hr.toIntOrNull() ?: 0, load.toDoubleOrNull() ?: 0.0, quality, if (type == "run") rpe.roundToInt() else 0, if (type == "run") feel else "", if (type == "run") pain.roundToInt() else 0)
         }) { Text("Simpan") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } })
 }
