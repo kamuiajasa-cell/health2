@@ -1,8 +1,10 @@
 package com.runnow.data
 
 import com.runnow.domain.ActKind
-import org.junit.Assert.*
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import java.time.ZoneId
 
 class WatchImportCodecTest {
