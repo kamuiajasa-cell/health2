@@ -80,8 +80,9 @@ class NativeIntervalsRuntime(context: Context) {
     suspend fun ensureStreamFor(activityId: String): Boolean {
         val activity = domain.data.acts.firstOrNull { it.icuId == activityId || it.lid == activityId } ?: return false
         domain.ensureStream(activity)
-        if (local.streamPoints(activityId).isEmpty() && !activity.icuId.isNullOrBlank() && !activity.icuId.startsWith("hw")) {
-            val id = java.net.URLEncoder.encode(activity.icuId, "UTF-8").replace("+", "%20")
+        val icuId = activity.icuId
+        if (local.streamPoints(activityId).isEmpty() && !icuId.isNullOrBlank() && !icuId.startsWith("hw")) {
+            val id = java.net.URLEncoder.encode(icuId, "UTF-8").replace("+", "%20")
             try {
                 icu.get("activity/$id/streams.json?types=time,distance,heartrate,cadence,velocity_smooth")
             } catch (_: Exception) { }
