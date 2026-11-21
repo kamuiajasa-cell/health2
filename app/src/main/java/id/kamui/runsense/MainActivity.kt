@@ -408,6 +408,8 @@ private fun ProgressScreen(
         SectionTitle("Volume harian", "7 HARI")
         WeeklyDistanceChart(activities)
         TrainingTrendChart(activities)
+        SectionTitle("Sebaran intensitas", "ZONA DETAK JANTUNG")
+        HeartRateZoneChart(activities, snapshot)
         SectionTitle("Review sesi", "MESIN RUNSENSE")
         val runs = domainResult?.activities?.filter { it.act.kind == com.runnow.domain.ActKind.RUN }?.take(5).orEmpty()
         if (runs.isEmpty()) EmptyCard("Review sesi akan muncul setelah aktivitas lari tersedia.")
@@ -529,6 +531,48 @@ private fun TrainingTrendChart(activities: List<ActivityRecord>) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun HeartRateZoneChart(activities: List<ActivityRecord>, snapshot: Snapshot?) {
+    val cutoff = System.currentTimeMillis() - 28L * 86_400_000L
+    val sessions = activities.filter { it.type.equals("run", true) && it.startedAt >= cutoff }.mapNotNull { activity ->
+        val zones = snapshot?.streams?.get(activity.id)?.tiz ?: return@mapNotNull null
+        if (zones.size != 5) return@mapNotNull null
+        zones to activity.durationMin.coerceAtLeast(1.0)
+    }
+    if (sessions.isEmpty()) {
+        EmptyCard("Sebaran zona HR muncul setelah stream detak jantung tersedia dari Huawei atau Intervals.icu.")
+        return
+    }
+    val totalMinutes = sessions.sumOf { it.second }
+    val averages = (0..4).map { zone ->
+        sessions.sumOf { it.first[zone] * it.second } / totalMinutes
+    }
+    val labels = listOf("Z1 · <60% HRR", "Z2 · 60–70% HRR", "Z3 · 70–80% HRR", "Z4 · 80–90% HRR", "Z5 · ≥90% HRR")
+    Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Waktu di zona HR", color = White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("${sessions.size} sesi · 28 hari", color = Muted, fontSize = 9.sp)
+            }
+            averages.forEachIndexed { index, value ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(labels[index], color = if (index == 1) Lime else White, fontSize = 10.sp)
+                        Text("${value.roundToInt()}%", color = if (index == 1) Lime else Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                    LinearProgressIndicator(
+                        progress = (value / 100.0).toFloat().coerceIn(0f, 1f),
+                        modifier = Modifier.fillMaxWidth().height(6.dp),
+                        color = if (index == 1) Lime else Lime.copy(alpha = 0.32f),
+                        trackColor = Color.White.copy(alpha = 0.08f)
+                    )
+                }
+            }
+            Text("Rata-rata berbobot durasi dari stream sesi. Zona memakai Heart Rate Reserve (RHR–HRmax), bukan LTHR.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
         }
     }
 }
