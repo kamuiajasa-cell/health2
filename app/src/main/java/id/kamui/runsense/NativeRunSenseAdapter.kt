@@ -80,7 +80,23 @@ fun nativeRunSenseAnalysis(
         streams = baseSnapshot?.streams ?: emptyMap(),
     ).processData()
     val load = TrainingEngine.summarize(activities, strength, wellness, profile)
+    val subjectivePainConcern = load.rationale.any { it.contains("nyeri", ignoreCase = true) }
+    val subjectiveEffortConcern = load.rationale.any { it.contains("RPE", ignoreCase = true) || it.contains("feel berat", ignoreCase = true) }
     val guarded = when {
+        subjectivePainConcern -> result.recommendation.copy(
+            k = "bad", status = "rest", title = "Pulihkan kaki", duration = "—",
+            hr = "—", pace = "Tanpa target",
+            reason = "Check-in 7 hari terakhir menunjukkan nyeri bermakna atau berulang. Jangan mengubah nyeri menjadi sesi latihan. Istirahat dan evaluasi; kembali berlari setelah aktivitas harian serta berjalan tidak memicu nyeri.",
+            steps = listOf("Saran" to "Istirahat dari lari dan latihan kaki yang memicu nyeri", "Batas" to "Jika nyeri menetap, memburuk, bengkak, atau mengubah langkah, periksakan ke tenaga kesehatan"),
+            tag = "RECOVERY", wl = null,
+        )
+        subjectiveEffortConcern -> result.recommendation.copy(
+            k = "wn", status = "train", title = "Easy respons tubuh", duration = "20–30 menit",
+            hr = "Zone 1–2", pace = "Sangat santai; RPE 2–3/10",
+            reason = "Check-in menunjukkan beberapa sesi terasa sangat berat. Coach menurunkan sesi menjadi easy singkat; jika pemanasan tetap terasa berat, ganti dengan istirahat.",
+            steps = listOf("Pemanasan" to "5 menit jalan", "Inti" to "10–20 menit easy, RPE 2–3/10", "Pendinginan" to "5 menit jalan"),
+            tag = "RECOVERY", wl = null,
+        )
         load.qualitySessions7d >= 2 -> result.recommendation.copy(
             k = "wn", status = "train", title = "Easy saja", duration = "25–35 menit",
             hr = "Zone 1–2", pace = "Santai dan terkontrol",
