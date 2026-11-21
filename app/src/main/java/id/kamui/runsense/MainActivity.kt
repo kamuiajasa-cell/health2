@@ -266,6 +266,25 @@ private fun BrandHeader() {
 }
 
 @Composable
+private fun CoachRecommendationCard(recommendation: com.runnow.domain.Recommendation?) {
+    if (recommendation == null) return
+    Surface(color = Panel, shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text("REKOMENDASI COACH · ${recommendation.tag}", color = Lime, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text(recommendation.title, color = White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Text(listOf(recommendation.duration, recommendation.hr, recommendation.pace).filter { it.isNotBlank() && it != "—" }.joinToString(" · "), color = Lime, fontSize = 11.sp)
+            Text(recommendation.reason, color = Muted, fontSize = 12.sp, lineHeight = 17.sp)
+            recommendation.steps.forEach { step ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(step.first, color = White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text(step.second, color = Muted, fontSize = 11.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ReadinessCard(score: Int?, recommendation: String) {
     Surface(color = Panel, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
