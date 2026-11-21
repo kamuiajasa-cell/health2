@@ -246,8 +246,7 @@ fun WatchScreen(modifier: Modifier = Modifier, onImported: (String) -> Unit = {}
             TextButton(
                 onClick = {
                     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("log jam", log.joinToString("
-")))
+                    cm.setPrimaryClip(ClipData.newPlainText("log jam", log.joinToString("\n")))
                     message = "Log disalin."
                 }
             ) { Text("Salin log") }
