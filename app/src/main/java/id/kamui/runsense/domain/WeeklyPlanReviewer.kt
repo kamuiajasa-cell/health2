@@ -49,6 +49,7 @@ object WeeklyPlanReviewer {
             val km = dayRuns.sumOf { it.distanceKm }
             val status = when {
                 session.date.isAfter(today) -> "MENDATANG"
+                session.targetKm <= 0 && dayRuns.isNotEmpty() -> "TERCAPAI"
                 session.targetKm > 0 && km >= session.targetKm * 0.8 -> "TERCAPAI"
                 km > 0 -> "SEBAGIAN"
                 else -> "TERLEWAT"
@@ -69,7 +70,7 @@ object WeeklyPlanReviewer {
         val adjustment: String
         val rationale: String
         when {
-            elevatedLoad && target > 0 && actual >= target * 0.85 -> {
+            elevatedLoad && target > 0 -> {
                 factor = 0.9
                 adjustment = "KURANGI TARGET 10%"
                 rationale = "Beban/pemulihan memberi sinyal hati-hati. Turunkan volume rencana minggu depan sekitar 10%; jangan menambah sesi quality."
