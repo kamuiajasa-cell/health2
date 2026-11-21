@@ -759,8 +759,8 @@ private fun ActivityDialog(onDismiss: () -> Unit, onSave: (String, Double, Doubl
     var hr by remember { mutableStateOf("") }
     var load by remember { mutableStateOf("") }
     var quality by remember { mutableStateOf(false) }
-    var rpe by remember { mutableFloatStateOf(5f) }
-    var feel by remember { mutableStateOf("sesuai") }
+    var rpe by remember { mutableFloatStateOf(0f) }
+    var feel by remember { mutableStateOf("") }
     var pain by remember { mutableFloatStateOf(0f) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Catat aktivitas") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -808,8 +808,8 @@ private fun SessionCheckinDialog(
     onDismiss: () -> Unit,
     onSave: (Int, String, Int) -> Unit,
 ) {
-    var rpe by remember(activity.id) { mutableFloatStateOf(if (activity.rpe > 0) activity.rpe.toFloat() else 5f) }
-    var feel by remember(activity.id) { mutableStateOf(activity.feel.ifBlank { "sesuai" }) }
+    var rpe by remember(activity.id) { mutableFloatStateOf(activity.rpe.toFloat()) }
+    var feel by remember(activity.id) { mutableStateOf(activity.feel) }
     var pain by remember(activity.id) { mutableFloatStateOf(activity.pain.toFloat()) }
     AlertDialog(
         onDismissRequest = onDismiss,
