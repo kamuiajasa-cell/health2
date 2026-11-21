@@ -74,4 +74,15 @@ class WeeklyPlanReviewerTest {
         assertTrue(review.nextWeekSessions[1].title.startsWith("Easy ringan (pengganti Tempo)"))
     }
 
+
+    @Test fun todaysUnfinishedSessionIsNotCountedAsMissedBeforeDayEnds() {
+        val today = LocalDate.of(2026, 11, 19)
+        val plan = listOf(PlannedSession(today, "Easy run", 4.0))
+        val review = WeeklyPlanReviewer.evaluate(today, plan, emptyList(), emptyList(), summary())
+        assertEquals("HARI INI", review.days.single().status)
+        assertEquals(0, review.dueSessions)
+        assertNull(review.adherencePercent)
+        assertEquals(0.0, review.targetKm, 0.001)
+    }
+
 }
