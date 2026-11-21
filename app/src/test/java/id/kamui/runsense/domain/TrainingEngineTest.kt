@@ -80,4 +80,32 @@ class TrainingEngineTest {
         assertEquals(160, result.averageRunningCadence)
     }
 
+
+    @Test fun completedLegStrengthFlagsUpcomingQualitySession() {
+        val planned = java.time.LocalDate.now().plusDays(2)
+        val strength = listOf(StrengthRecord("s", planned.minusDays(1).toString(), "leg", 30, 3, true))
+        val summary = TrainingEngine.summarize(emptyList(), strength, emptyList(), AthleteProfile())
+        val advice = TrainingEngine.advisePlannedSession("Interval", planned, emptyList(), strength, summary)
+        assertNotNull(advice)
+        assertEquals("TINJAU ULANG SESI", advice?.status)
+    }
+
+    @Test fun unfinishedLegStrengthDoesNotFlagUpcomingQualitySession() {
+        val planned = java.time.LocalDate.now().plusDays(2)
+        val strength = listOf(StrengthRecord("s", planned.minusDays(1).toString(), "leg", 30, 3, false))
+        val summary = TrainingEngine.summarize(emptyList(), strength, emptyList(), AthleteProfile())
+        val advice = TrainingEngine.advisePlannedSession("Interval", planned, emptyList(), strength, summary)
+        assertNull(advice)
+    }
+
+    @Test fun recentQualityRunFlagsAnotherDemandingPlannedSession() {
+        val planned = java.time.LocalDate.now().plusDays(1)
+        val runTime = planned.minusDays(1).atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val runs = listOf(ActivityRecord("q", runTime, "run", 35.0, 5.0, 160, quality = true))
+        val summary = TrainingEngine.summarize(runs, emptyList(), emptyList(), AthleteProfile())
+        val advice = TrainingEngine.advisePlannedSession("Tempo", planned, runs, emptyList(), summary)
+        assertEquals("JARAK QUALITY BERDEKATAN", advice?.status)
+    }
+
+
 }
