@@ -88,7 +88,7 @@ private val primaryTabs = listOf(RunTab.HOME, RunTab.TRAINING, RunTab.PROGRESS, 
 private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeIntervalsRuntime) {
     var selected by remember { mutableStateOf(RunTab.HOME) }
     var lightTheme by remember { mutableStateOf(repository.isLightTheme()) }
-    var onboarding by remember { mutableStateOf(!repository.onboardingComplete() && repository.activities().isEmpty() && repository.wellness().isEmpty()) }
+    var onboarding by remember { mutableStateOf(!repository.onboardingComplete() && !intervals.hasApiKey() && repository.activities().isEmpty() && repository.wellness().isEmpty()) }
     var revision by remember { mutableIntStateOf(0) }
     var showActivity by remember { mutableStateOf(false) }
     var showStrength by remember { mutableStateOf(false) }
