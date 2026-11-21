@@ -169,7 +169,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
 
     MaterialTheme(colorScheme = if (lightTheme) lightColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Color.White, onBackground = White, onSurface = White) else darkColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Ink, onBackground = White, onSurface = White)) {
         if (onboarding) {
-            OnboardingScreen(onConnect = { showApiKey = true }, onSkip = { repository.saveOnboardingComplete(); onboarding = false; selected = RunTab.HOME })
+            OnboardingScreen(status = syncMessage, onConnect = { showApiKey = true }, onSkip = { repository.saveOnboardingComplete(); onboarding = false; selected = RunTab.HOME })
         } else Scaffold(
             containerColor = Ink,
             bottomBar = {
@@ -274,7 +274,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
 }
 
 @Composable
-private fun OnboardingScreen(onConnect: () -> Unit, onSkip: () -> Unit) {
+private fun OnboardingScreen(status: String, onConnect: () -> Unit, onSkip: () -> Unit) {
     Column(
         Modifier.fillMaxSize().background(Ink).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 36.dp),
         verticalArrangement = Arrangement.Center
@@ -292,6 +292,7 @@ private fun OnboardingScreen(onConnect: () -> Unit, onSkip: () -> Unit) {
                 Text("API key disimpan di penyimpanan privat perangkat. Kamu juga bisa melanjutkan tanpa sinkronisasi dan mengimpor data jam nanti.", color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
                 Button(onClick = onConnect, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Hubungkan & Mulai") }
                 OutlinedButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) { Text("Lanjut tanpa sinkron") }
+                if (status.isNotBlank()) Text(status, color = Color(0xFFFFC36A), fontSize = 11.sp, lineHeight = 16.sp)
             }
         }
     }
