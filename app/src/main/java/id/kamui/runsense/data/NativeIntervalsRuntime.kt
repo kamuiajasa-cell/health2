@@ -114,10 +114,25 @@ class NativeIntervalsRuntime(context: Context) {
     suspend fun sync(apiKey: String? = null): String {
         if (!apiKey.isNullOrBlank()) domain.login(apiKey.trim())
         val result = domain.sync(silent = false)
+        // Ambil stream untuk seluruh lari Intervals.icu yang belum tersimpan.
+        // Stream disimpan lokal saat HTTP request berlangsung, sehingga layar Riwayat
+        // cukup membaca cache dan tidak perlu tombol "Muat stream".
+        val streamCandidates = domain.data.acts
+            .filter { activity ->
+                activity.kind == com.runnow.domain.ActKind.RUN &&
+                    activity.min >= 5.0 && activity.km >= 0.3 &&
+                    !activity.icuId.isNullOrBlank() && !activity.icuId.startsWith("hw")
+            }
+            .sortedByDescending { it.start }
+        var streamsLoaded = 0
+        for (activity in streamCandidates) {
+            val id = activity.icuId ?: continue
+            if (ensureStreamFor(id)) streamsLoaded++
+        }
         val imported = local.importDomainRecords(domain.data.acts, domain.data.wellness)
         return buildString {
             append(result.message.ifBlank { if (result.ok) "Sinkron selesai" else "Belum ada hasil sinkron" })
-            if (result.ok) append(" · ${imported.first} aktivitas baru · ${imported.second} hari wellness diperbarui")
+            if (result.ok) append(" · ${imported.first} aktivitas baru · ${imported.second} hari wellness diperbarui · $streamsLoaded stream lari tersimpan")
         }
     }
 }
