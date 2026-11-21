@@ -72,6 +72,8 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     var revision by remember { mutableIntStateOf(0) }
     var showActivity by remember { mutableStateOf(false) }
     var showStrength by remember { mutableStateOf(false) }
+    var showStrengthTarget by remember { mutableStateOf(false) }
+    var showParq by remember { mutableStateOf(false) }
     var showWellness by remember { mutableStateOf(false) }
     var showProfile by remember { mutableStateOf(false) }
     var showApiKey by remember { mutableStateOf(false) }
@@ -85,6 +87,8 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     val activities = remember(revision) { repository.activities() }
     val strength = remember(revision) { repository.strength() }
     val wellness = remember(revision) { repository.wellness() }
+    val strengthTarget = remember(revision) { repository.weeklyStrengthTarget() }
+    val parqAnswers = remember(revision) { repository.parqAnswers() }
     val summary = remember(revision) { TrainingEngine.summarize(activities, strength, wellness, profile) }
     val baseSnapshot = remember(revision) { runCatching { intervals.snapshot() }.getOrNull() }
     val domainResult = remember(revision) { runCatching { nativeRunSenseAnalysis(activities, strength, wellness, profile, baseSnapshot, planSettings) }.getOrNull() }
@@ -130,6 +134,8 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                     profile, wellness, Modifier.padding(padding),
                     hasIntervalsKey = intervals.hasApiKey(), syncBusy = syncBusy, syncMessage = syncMessage,
                     onProfile = { showProfile = true }, onWellness = { showWellness = true }, onPlanRace = { showPlanRace = true },
+                    strengthTarget = strengthTarget, parqAnswers = parqAnswers,
+                    onStrengthTarget = { showStrengthTarget = true }, onParq = { showParq = true },
                     onApiKey = { showApiKey = true },
                     onSync = {
                         scope.launch {
@@ -159,6 +165,8 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
         if (showStrength) StrengthDialog(onDismiss = { showStrength = false }, onSave = { category, duration, level, done ->
             repository.addStrength(category, duration, level, done); showStrength = false; changed()
         })
+        if (showStrengthTarget) StrengthTargetDialog(strengthTarget, onDismiss = { showStrengthTarget = false }, onSave = { days -> repository.saveWeeklyStrengthTarget(days); showStrengthTarget = false; changed() })
+        if (showParq) ParqDialog(parqAnswers, onDismiss = { showParq = false }, onSave = { answers -> repository.saveParqAnswers(answers); showParq = false; changed() })
         if (showWellness) WellnessDialog(onDismiss = { showWellness = false }, onSave = { rhr, sleep, hrv ->
             repository.addWellness(rhr, sleep, hrv); showWellness = false; changed()
         })
@@ -606,6 +614,7 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
 @Composable
 private fun SettingsScreen(
     profile: AthleteProfile, wellness: List<WellnessRecord>, modifier: Modifier,
+    strengthTarget: Int, parqAnswers: List<Boolean?>, onStrengthTarget: () -> Unit, onParq: () -> Unit,
     hasIntervalsKey: Boolean, syncBusy: Boolean, syncMessage: String,
     onProfile: () -> Unit, onWellness: () -> Unit, onPlanRace: () -> Unit, onApiKey: () -> Unit, onSync: () -> Unit
 ) {
@@ -621,6 +630,15 @@ private fun SettingsScreen(
         Button(onClick = onApiKey, colors = ButtonDefaults.buttonColors(containerColor = Panel, contentColor = Lime)) { Text(if (hasIntervalsKey) "Ganti API key" else "Masukkan API key") }
         OutlinedButton(onClick = onSync, enabled = hasIntervalsKey && !syncBusy) { Text(if (syncBusy) "Menyinkronkan…" else "Sinkronkan sekarang") }
         if (syncMessage.isNotBlank()) Text(syncMessage, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+        SectionTitle("Strength", "TARGET MINGGUAN")
+        InfoCard("Target strength", "$strengthTarget hari per minggu", "COACH")
+        OutlinedButton(onClick = onStrengthTarget, modifier = Modifier.fillMaxWidth()) { Text("Atur target strength mingguan") }
+        SectionTitle("Skrining aktivitas", "PAR-Q · 7 PERTANYAAN")
+        val yesCount = parqAnswers.count { it == true }
+        val answered = parqAnswers.count { it != null }
+        InfoCard("Status PAR-Q", if (answered < 7) "$answered/7 pertanyaan terisi" else if (yesCount > 0) "$yesCount jawaban YA — perlu tindak lanjut" else "Semua jawaban TIDAK", if (yesCount > 0) "PERHATIAN" else "SKRINING")
+        OutlinedButton(onClick = onParq, modifier = Modifier.fillMaxWidth()) { Text("Isi / perbarui PAR-Q") }
+        if (yesCount > 0) Text("Ada jawaban YA. Konsultasikan dengan tenaga kesehatan sebelum memulai atau meningkatkan latihan.", color = Color(0xFFFFC36A), fontSize = 11.sp, lineHeight = 16.sp)
         SectionTitle("Wellness", "${wellness.size} HARI TERCATAT")
         wellness.takeLast(7).reversed().forEach { InfoCard(it.date, "RHR ${it.restingHr} bpm · tidur ${it.sleepHours} jam · HRV ${if (it.hrv > 0) it.hrv else 0.0}", "TERSIMPAN") }
         OutlinedButton(onClick = onWellness) { Text("＋ Catat wellness hari ini") }
@@ -855,6 +873,47 @@ private fun StrengthDialog(onDismiss: () -> Unit, onSave: (String, Int, Int, Boo
         } },
         confirmButton = { TextButton(onClick = { onSave(category, (duration.toIntOrNull() ?: 0).coerceAtLeast(0), (level.toIntOrNull() ?: 0).coerceIn(0,4), true) }) { Text("Sudah") } },
         dismissButton = { TextButton(onClick = { onSave(category, (duration.toIntOrNull() ?: 0), (level.toIntOrNull() ?: 0).coerceIn(0,4), false) }) { Text("Skip") } })
+}
+
+
+@Composable
+private fun StrengthTargetDialog(current: Int, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
+    var days by remember(current) { mutableIntStateOf(current) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Target strength mingguan") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("$days hari per minggu", color = Lime, fontWeight = FontWeight.Bold)
+            Slider(value = days.toFloat(), onValueChange = { days = it.roundToInt() }, valueRange = 0f..7f, steps = 6)
+        } },
+        confirmButton = { TextButton(onClick = { onSave(days) }) { Text("Simpan") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } })
+}
+
+@Composable
+private fun ParqDialog(current: List<Boolean?>, onDismiss: () -> Unit, onSave: (List<Boolean?>) -> Unit) {
+    val questions = listOf(
+        "Dokter pernah menyatakan Anda memiliki kondisi jantung dan hanya boleh berolahraga sesuai rekomendasi tenaga kesehatan?",
+        "Apakah Anda merasakan nyeri dada saat melakukan aktivitas fisik?",
+        "Dalam sebulan terakhir, pernahkah nyeri dada muncul saat tidak beraktivitas fisik?",
+        "Pernahkah Anda kehilangan keseimbangan karena pusing atau kehilangan kesadaran?",
+        "Apakah Anda memiliki masalah tulang atau sendi yang dapat memburuk akibat perubahan aktivitas fisik?",
+        "Apakah dokter saat ini meresepkan obat untuk tekanan darah atau kondisi jantung?",
+        "Adakah alasan kesehatan lain yang membuat aktivitas fisik tidak aman bagi Anda?"
+    )
+    val answers = remember(current) { mutableStateListOf<Boolean?>().apply { addAll(current) } }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("PAR-Q · skrining awal") },
+        text = { Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Skrining awal, bukan diagnosis atau izin medis. Jawab semua pertanyaan.", color = Muted, fontSize = 11.sp)
+            questions.forEachIndexed { index, question ->
+                Text("${index + 1}. $question", color = White, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(answers[index] == true, { answers[index] = true }, label = { Text("YA") })
+                    FilterChip(answers[index] == false, { answers[index] = false }, label = { Text("TIDAK") })
+                }
+            }
+            if (answers.any { it == true }) Text("Ada jawaban YA. Konsultasikan dengan tenaga kesehatan sebelum memulai atau meningkatkan latihan. Nyeri dada akut, pingsan, atau sesak berat memerlukan pertolongan segera.", color = Color(0xFFFFC36A), fontSize = 11.sp)
+        } },
+        confirmButton = { TextButton(onClick = { onSave(answers.toList()) }, enabled = answers.all { it != null }) { Text("Simpan") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } })
 }
 
 @Composable
