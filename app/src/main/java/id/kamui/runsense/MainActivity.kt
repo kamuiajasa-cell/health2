@@ -525,7 +525,7 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
         if (planSettings.plan.isEmpty()) {
             EmptyCard("Belum ada rencana mingguan tersimpan di profil RunSense. Setelah rencana tersedia, Coach akan membandingkan target harian dengan kilometer aktual dan strength yang selesai.")
         } else {
-            val today = java.time.LocalDate.parse(snapshot.ymd())
+            val today = snapshot?.ymd()?.let { java.time.LocalDate.parse(it) } ?: java.time.LocalDate.now()
             val monday = today.minusDays((today.dayOfWeek.value + 6).toLong() % 7L)
             val plannedSessions = PLAN_DAYS.mapNotNull { day ->
                 planSettings.plan[day]?.let { p ->
