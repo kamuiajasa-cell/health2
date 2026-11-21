@@ -31,7 +31,7 @@ class RunSenseRepository(context: Context) {
     }.sortedBy { it.date }
 
     fun profile(): AthleteProfile = AthleteProfile(
-        prefs.getInt("rhr", 60), prefs.getInt("maxHr", 185), prefs.getInt("lthr", 160),
+        prefs.getInt("rhr", 63), prefs.getInt("maxHr", 185), prefs.getInt("lthr", 160),
         prefs.getInt("ltPace", 390), prefs.getInt("heightCm", 0), prefs.getFloat("weightKg", 0f).toDouble()
     )
     fun saveProfile(p: AthleteProfile) {
