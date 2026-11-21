@@ -45,7 +45,7 @@ class NativeIntervalsRuntime(context: Context) {
                         val stream = if (status in 200..399) connection.inputStream else connection.errorStream
                         val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
                         if (status in 200..299) {
-                            val streamId = Regex("/activities/([^/?]+)/streams").find(url)?.groupValues?.getOrNull(1)
+                            val streamId = Regex("/activity/([^/?]+)/streams\\.json").find(url)?.groupValues?.getOrNull(1)
                             if (!streamId.isNullOrBlank()) prefs.edit().putString("icu_stream_$streamId", body).apply()
                         }
                         HttpResponse(status, body)
