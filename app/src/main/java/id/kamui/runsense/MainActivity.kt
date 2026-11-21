@@ -193,7 +193,6 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
 }
 
 @Composable
-@Composable
 private fun Page(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
 }
