@@ -47,6 +47,65 @@ class RunSenseRepository(context: Context) {
         writeArray("wellness", next)
     }
 
+
+    /** Merge Huawei WatchImport JSON into the same local history used by native Coach and Progress. */
+    fun importWatchJson(json: String): Pair<Int, Int> {
+        val root = JSONObject(json)
+        val oldActs = readArray("activities")
+        val byId = LinkedHashMap<String, JSONObject>()
+        for (i in 0 until oldActs.length()) {
+            val item = oldActs.optJSONObject(i) ?: continue
+            val id = item.optString("id")
+            if (id.isNotBlank()) byId[id] = item
+        }
+        val incomingActs = root.optJSONArray("acts") ?: JSONArray()
+        var added = 0
+        for (i in 0 until incomingActs.length()) {
+            val row = incomingActs.optJSONArray(i) ?: continue
+            if (row.length() < 10) continue
+            val start = row.optLong(0)
+            val id = row.optString(9).ifBlank { "hw$start" }
+            val existed = byId.containsKey(id)
+            val item = byId[id] ?: JSONObject()
+            item.put("id", id)
+                .put("startedAt", start)
+                .put("type", row.optString(1, "run"))
+                .put("durationMin", row.optDouble(2))
+                .put("distanceKm", row.optDouble(3))
+                .put("averageHr", row.optDouble(4).toInt())
+                .put("externalLoad", row.optDouble(8))
+                .put("quality", false)
+            byId[id] = item
+            if (!existed) added++
+        }
+        val mergedActs = JSONArray()
+        byId.values.sortedBy { it.optLong("startedAt") }.takeLast(1200).forEach { mergedActs.put(it) }
+        writeArray("activities", mergedActs)
+
+        val oldWell = readArray("wellness")
+        val byDate = LinkedHashMap<String, JSONObject>()
+        for (i in 0 until oldWell.length()) {
+            val item = oldWell.optJSONObject(i) ?: continue
+            val date = item.optString("date")
+            if (date.isNotBlank()) byDate[date] = item
+        }
+        val incomingWell = root.optJSONArray("wellness") ?: JSONArray()
+        for (i in 0 until incomingWell.length()) {
+            val item = incomingWell.optJSONObject(i) ?: continue
+            val date = item.optString("id")
+            if (date.isBlank()) continue
+            val dest = byDate[date] ?: JSONObject().put("date", date)
+            if (item.has("restingHR")) dest.put("restingHr", item.optDouble("restingHR").toInt())
+            if (item.has("sleepSecs")) dest.put("sleepHours", item.optDouble("sleepSecs") / 3600.0)
+            if (item.has("hrv")) dest.put("hrv", item.optDouble("hrv"))
+            byDate[date] = dest
+        }
+        val mergedWell = JSONArray()
+        byDate.values.sortedBy { it.optString("date") }.takeLast(400).forEach { mergedWell.put(it) }
+        writeArray("wellness", mergedWell)
+        return added to incomingWell.length()
+    }
+
     private fun objects(key: String): List<JSONObject> { val a = readArray(key); return (0 until a.length()).mapNotNull { a.optJSONObject(it) } }
     private fun readArray(k: String): JSONArray = try { JSONArray(prefs.getString(k, "[]")) } catch (_: Exception) { JSONArray() }
     private fun writeArray(k: String, v: JSONArray) { prefs.edit().putString(k, v.toString()).apply() }
