@@ -24,6 +24,7 @@ class NativeIntervalsRuntime(context: Context) {
     private val prefs = app.getSharedPreferences("runsense_native_v1", Context.MODE_PRIVATE)
     private val local = RunSenseRepository(app)
     private lateinit var domain: DomainRepository
+    private lateinit var icu: IcuHttp
 
     init {
         val store = object : KeyValueStore {
@@ -60,7 +61,7 @@ class NativeIntervalsRuntime(context: Context) {
             override suspend fun geocode(name: String): GeoLoc? = null
             override suspend fun currentTemp(lat: Double, lon: Double): Double? = null
         }
-        val icu = IcuHttp(http) { domain.apiKey }
+        icu = IcuHttp(http) { domain.apiKey }
         domain = DomainRepository(store, icu, weather, null, null, Clock { System.currentTimeMillis() }, ZoneId.systemDefault())
         domain.restore()
     }
@@ -79,7 +80,13 @@ class NativeIntervalsRuntime(context: Context) {
     suspend fun ensureStreamFor(activityId: String): Boolean {
         val activity = domain.data.acts.firstOrNull { it.icuId == activityId || it.lid == activityId } ?: return false
         domain.ensureStream(activity)
-        return domain.data.sx.containsKey(activity.icuId ?: activity.lid)
+        if (local.streamPoints(activityId).isEmpty() && !activity.icuId.isNullOrBlank() && !activity.icuId.startsWith("hw")) {
+            val id = java.net.URLEncoder.encode(activity.icuId, "UTF-8").replace("+", "%20")
+            try {
+                icu.get("activity/$id/streams.json?types=time,distance,heartrate,cadence,velocity_smooth")
+            } catch (_: Exception) { }
+        }
+        return local.streamPoints(activityId).isNotEmpty()
     }
 
     suspend fun sync(apiKey: String? = null): String {
