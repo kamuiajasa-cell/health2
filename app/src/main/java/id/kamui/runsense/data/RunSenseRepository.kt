@@ -19,7 +19,7 @@ class RunSenseRepository(context: Context) {
     }.sortedByDescending { it.startedAt }
 
     fun strength(): List<StrengthRecord> = objects("strength").mapNotNull { o ->
-        try { StrengthRecord(o.getString("id"), o.getString("date"), o.getString("category"), o.optInt("durationMin"), o.optInt("level"), o.optBoolean("completed")) } catch (_: Exception) { null }
+        try { StrengthRecord(o.getString("id"), o.getString("date"), o.getString("category"), o.optInt("durationMin"), o.optInt("level"), o.optBoolean("completed"), o.optString("exercise"), o.optInt("sets"), o.optInt("reps"), o.optDouble("resistanceKg")) } catch (_: Exception) { null }
     }.sortedByDescending { it.date }
 
     fun wellness(): List<WellnessRecord> = objects("wellness").mapNotNull { o ->
@@ -50,11 +50,24 @@ class RunSenseRepository(context: Context) {
         writeArray("activities", next)
     }
 
-    fun addStrength(category: String, duration: Int, level: Int, completed: Boolean) {
+    fun addStrength(category: String, duration: Int, level: Int, completed: Boolean, exercise: String = "", sets: Int = 0, reps: Int = 0, resistanceKg: Double = 0.0) {
         val a = readArray("strength")
-        a.put(JSONObject().put("id", UUID.randomUUID().toString()).put("date", dateFormat.format(Date())).put("category", category).put("durationMin", duration).put("level", level).put("completed", completed))
+        a.put(JSONObject().put("id", UUID.randomUUID().toString()).put("date", dateFormat.format(Date())).put("category", category).put("durationMin", duration).put("level", level).put("completed", completed).put("exercise", exercise).put("sets", sets.coerceAtLeast(0)).put("reps", reps.coerceAtLeast(0)).put("resistanceKg", resistanceKg.coerceAtLeast(0.0)))
         writeArray("strength", a)
     }
+
+    fun weeklyStrengthTarget(): Int = prefs.getInt("weekly_strength_target", 2).coerceIn(0, 7)
+    fun saveWeeklyStrengthTarget(days: Int) { prefs.edit().putInt("weekly_strength_target", days.coerceIn(0, 7)).apply() }
+
+    fun parqAnswers(): List<Boolean?> {
+        val raw = prefs.getString("parq_answers", null) ?: return List(7) { null }
+        return try { val a = JSONArray(raw); List(7) { i -> if (i >= a.length() || a.isNull(i)) null else a.optBoolean(i) } } catch (_: Exception) { List(7) { null } }
+    }
+    fun saveParqAnswers(answers: List<Boolean?>) {
+        val a = JSONArray(); (0 until 7).forEach { i -> val value = answers.getOrNull(i); if (value == null) a.put(JSONObject.NULL) else a.put(value) }
+        prefs.edit().putString("parq_answers", a.toString()).putLong("parq_updated_at", System.currentTimeMillis()).apply()
+    }
+    fun parqUpdatedAt(): Long = prefs.getLong("parq_updated_at", 0L)
 
     fun addWellness(rhr: Int, sleep: Double, hrv: Double) {
         val date = dateFormat.format(Date()); val old = readArray("wellness"); val next = JSONArray()
