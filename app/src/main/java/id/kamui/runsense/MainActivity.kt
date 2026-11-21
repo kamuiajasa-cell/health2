@@ -653,16 +653,35 @@ private fun SettingsScreen(
     strengthTarget: Int, parqAnswers: List<Boolean?>, onStrengthTarget: () -> Unit, onParq: () -> Unit,
     hasIntervalsKey: Boolean, syncBusy: Boolean, syncMessage: String,
     onProfile: () -> Unit, onWellness: () -> Unit, onPlanRace: () -> Unit, onApiKey: () -> Unit, onSync: () -> Unit,
-    onCoach: () -> Unit, onWatch: () -> Unit
+    onCoach: () -> Unit, onWatch: () -> Unit,
+    runWalk: RunWalkSettings, lightTheme: Boolean, coachingStyle: String,
+    onRunWalk: (RunWalkSettings) -> Unit, onTheme: (Boolean) -> Unit, onStyle: (String) -> Unit
 ) {
     Page(modifier) {
         PageHero("ATHLETE PROFILE", "Your", "profile.", "Atur data tubuh, target, jadwal latihan, dan koneksi data.")
+        SectionTitle("Tampilan", "PERSONALISASI")
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Tema terang", color = White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(if (lightTheme) "Aktif" else "Gelap · default", color = Muted, fontSize = 11.sp)
+            }
+            Switch(checked = lightTheme, onCheckedChange = onTheme)
+        }
+        SectionTitle("Gaya coaching", "PREFERENSI COACH")
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("conservative" to "Konservatif", "moderate" to "Moderat", "aggressive" to "Agresif").forEach { item ->
+                FilterChip(selected = coachingStyle == item.first, onClick = { onStyle(item.first) }, label = { Text(item.second, fontSize = 10.sp) })
+            }
+        }
+        SectionTitle("Pola lari–jalan", "SEMUA TAHAP")
+        RunWalkSettingsCard(runWalk, onRunWalk)
         SectionTitle("Ruang latihan", "FITUR RUNSENSE")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onCoach, modifier = Modifier.weight(1f)) { Text("✦ Coach") }
             OutlinedButton(onClick = onWatch, modifier = Modifier.weight(1f)) { Text("⌚ Jam") }
         }
         InfoCard("Profil detak jantung", "RHR ${profile.restingHr} · HRmax ${profile.maxHr} · LTHR ${profile.thresholdHr}", "EDIT")
+        InfoCard("Data tubuh", "TB ${if (profile.heightCm > 0) "${profile.heightCm} cm" else "belum diisi"} · BB ${if (profile.weightKg > 0) "${profile.weightKg} kg" else "belum diisi"}", "PROFIL")
         Button(onClick = onProfile, colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Atur profil") }
         SectionTitle("Rencana dan target race", "TERSIMPAN LOKAL")
         OutlinedButton(onClick = onPlanRace, modifier = Modifier.fillMaxWidth()) { Text("Atur rencana mingguan & race") }
@@ -1074,6 +1093,7 @@ private fun PlanRaceDialog(
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
                     label = { Text("Tanggal (YYYY-MM-DD)") }
                 )
+                TextButton(onClick = { raceDate = "" }) { Text("Hapus tanggal lomba") }
                 OutlinedTextField(
                     value = raceDistance, onValueChange = { raceDistance = it },
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
@@ -1147,14 +1167,22 @@ private fun ProfileDialog(profile: AthleteProfile, onDismiss: () -> Unit, onSave
     var max by remember { mutableStateOf(profile.maxHr.toString()) }
     var lt by remember { mutableStateOf(profile.thresholdHr.toString()) }
     var pace by remember { mutableStateOf(profile.thresholdPaceSecPerKm.toString()) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Profil fisiologis") },
+    var height by remember { mutableStateOf(profile.heightCm.takeIf { it > 0 }?.toString() ?: "") }
+    var weight by remember { mutableStateOf(profile.weightKg.takeIf { it > 0 }?.toString() ?: "") }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Profil fisiologis & tubuh") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             NumberField("RHR (bpm)", rhr) { rhr = it }
             NumberField("HRmax (bpm)", max) { max = it }
             NumberField("LTHR (bpm)", lt) { lt = it }
             NumberField("LT pace (detik/km)", pace) { pace = it }
+            NumberField("Tinggi badan (cm)", height) { height = it }
+            NumberField("Berat badan (kg)", weight) { weight = it }
         } },
-        confirmButton = { TextButton(onClick = { onSave(AthleteProfile(rhr.toIntOrNull() ?: 60, max.toIntOrNull() ?: 185, lt.toIntOrNull() ?: 160, pace.toIntOrNull() ?: 390)) }) { Text("Simpan") } },
+        confirmButton = { TextButton(onClick = { onSave(AthleteProfile(
+            rhr.toIntOrNull() ?: 60, max.toIntOrNull() ?: 185, lt.toIntOrNull() ?: 160,
+            pace.toIntOrNull() ?: 390, height.toIntOrNull()?.coerceIn(100, 230) ?: 0,
+            weight.toDoubleOrNull()?.takeIf { it in 25.0..250.0 } ?: 0.0
+        )) }) { Text("Simpan") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } })
 }
 
