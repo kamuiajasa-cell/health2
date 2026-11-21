@@ -4,6 +4,9 @@ import android.os.Bundle
 import android.app.Activity
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -101,6 +104,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     var showProfile by remember { mutableStateOf(false) }
     var showApiKey by remember { mutableStateOf(false) }
     var showPlanRace by remember { mutableStateOf(false) }
+    var showWorkoutComposer by remember { mutableStateOf(false) }
     var checkinActivity by remember { mutableStateOf<ActivityRecord?>(null) }
     var syncBusy by remember { mutableStateOf(false) }
     var syncMessage by remember { mutableStateOf("") }
@@ -187,7 +191,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
             }
         ) { padding ->
             when (selected) {
-                RunTab.HOME -> HomeScreen(activities, summary, domainResult, weather, weatherMessage, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onRefreshWeather = { refreshWeather() })
+                RunTab.HOME -> HomeScreen(activities, summary, domainResult, weather, weatherMessage, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onRefreshWeather = { refreshWeather() }, onWorkout = { showWorkoutComposer = true })
                 RunTab.TRAINING -> TrainingScreen(activities, strength, profile, domainResult, baseSnapshot, repository, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onCheckin = { checkinActivity = it })
                 RunTab.PROGRESS -> ProgressScreen(
                     activities, summary, domainResult, baseSnapshot, repository, strength, profile, Modifier.padding(padding),
@@ -228,6 +232,26 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                 checkinActivity = null
                 changed()
             })
+        }
+        if (showWorkoutComposer) {
+            val recommendation = domainResult?.recommendation
+            WorkoutComposerDialog(
+                recommendation = recommendation,
+                onDismiss = { showWorkoutComposer = false },
+                onSend = { name, date, description ->
+                    scope.launch {
+                        syncBusy = true
+                        try {
+                            syncMessage = withContext(Dispatchers.IO) {
+                                intervals.createPlannedWorkout(name, date, description)
+                            }
+                            showWorkoutComposer = false
+                        } catch (e: Exception) {
+                            syncMessage = "Gagal mengirim workout: ${e.message}"
+                        } finally { syncBusy = false }
+                    }
+                }
+            )
         }
         if (showActivity) ActivityDialog(onDismiss = { showActivity = false }, onSave = { type, duration, distance, hr, load, quality, rpe, feel, pain ->
             repository.addActivity(type, duration, distance, hr, load, quality, rpe, feel, pain); showActivity = false; changed()
@@ -326,11 +350,11 @@ private fun Page(modifier: Modifier, content: @Composable ColumnScope.() -> Unit
 }
 
 @Composable
-private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummary, domainResult: com.runnow.domain.ProcessResult?, weather: WeatherSnapshot?, weatherMessage: String, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit, onRefreshWeather: () -> Unit) {
+private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummary, domainResult: com.runnow.domain.ProcessResult?, weather: WeatherSnapshot?, weatherMessage: String, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit, onRefreshWeather: () -> Unit, onWorkout: () -> Unit) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { HomePageHero() }
         item { WeatherCard(weather, weatherMessage, onRefreshWeather) }
-        item { CoachRecommendationCard(domainResult?.recommendation) }
+        item { CoachRecommendationCard(domainResult?.recommendation, onWorkout) }
         item { ReadinessCard(domainResult?.athlete?.score ?: summary.readiness, summary.recommendation) }
         item { SectionKicker("YOUR TRAINING", "01") }
         item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1358,7 +1382,7 @@ private fun WeatherCard(weather: WeatherSnapshot?, message: String, onRefresh: (
 }
 
 @Composable
-private fun CoachRecommendationCard(recommendation: com.runnow.domain.Recommendation?) {
+private fun CoachRecommendationCard(recommendation: com.runnow.domain.Recommendation?, onWorkout: () -> Unit) {
     if (recommendation == null) return
     Surface(color = Panel, shape = RoundedCornerShape(26.dp), modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = .05f), RoundedCornerShape(26.dp))) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -1372,6 +1396,12 @@ private fun CoachRecommendationCard(recommendation: com.runnow.domain.Recommenda
                     Text(step.second, color = Muted, fontSize = 11.sp)
                 }
             }
+            Button(
+                onClick = onWorkout,
+                enabled = recommendation.status == "train" && recommendation.steps.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)
+            ) { Text("▶  Kerjakan di jam") }
         }
     }
 }
@@ -1802,6 +1832,97 @@ private fun ProfileDialog(profile: AthleteProfile, onDismiss: () -> Unit, onSave
             weight.toDoubleOrNull()?.takeIf { it in 25.0..250.0 } ?: 0.0
         )) }) { Text("Simpan") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } })
+}
+
+@Composable
+private fun WorkoutComposerDialog(
+    recommendation: com.runnow.domain.Recommendation?,
+    onDismiss: () -> Unit,
+    onSend: (String, String, String) -> Unit
+) {
+    val context = LocalContext.current
+    val rec = recommendation
+    var name by remember(rec) { mutableStateOf(rec?.title ?: "Latihan lari") }
+    var date by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
+    var description by remember(rec) { mutableStateOf(rec?.let { recommendationWorkoutText(it) }.orEmpty()) }
+    val canSend = rec?.status == "train" && description.isNotBlank() && runCatching { java.time.LocalDate.parse(date) }.isSuccess
+
+    fun workoutText(): String = buildString {
+        append(name.trim().ifBlank { "Latihan lari" })
+        append("\n")
+        append(date.trim())
+        append("\n\n")
+        append(description.trim())
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Kerjakan di jam", color = White, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                Text("Susun latihan dari rekomendasi Coach, lalu kirim ke kalender Intervals.icu atau bagikan teksnya.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+                OutlinedTextField(name, { name = it }, label = { Text("Nama latihan") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(date, { date = it }, label = { Text("Tanggal (YYYY-MM-DD)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    description, { description = it },
+                    label = { Text("Struktur workout Intervals.icu") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 7,
+                    maxLines = 12
+                )
+                if (rec?.status != "train") {
+                    Text("Coach tidak merekomendasikan sesi lari hari ini. Pengiriman workout dinonaktifkan.", color = Color(0xFFFFC36A), fontSize = 11.sp)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            cm.setPrimaryClip(ClipData.newPlainText("RunSense workout", workoutText()))
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Salin teks") }
+                    OutlinedButton(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, name)
+                                putExtra(Intent.EXTRA_TEXT, workoutText())
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Bagikan workout"))
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Bagikan") }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSend(name, date, description) }, enabled = canSend) {
+                Text("Kirim ke Intervals.icu", color = if (canSend) Lime else Muted)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
+    )
+}
+
+private fun recommendationWorkoutText(recommendation: com.runnow.domain.Recommendation): String {
+    recommendation.wl?.takeIf { it.isNotEmpty() }?.let { return it.joinToString("\n").trim() }
+    return recommendation.steps.mapNotNull { (label, detail) ->
+        val repeat = Regex("(\\d+)\\s*[x×]\\s*(\\d+)\\s*m(?:nt|enit)", RegexOption.IGNORE_CASE).find(detail)
+        if (repeat != null) {
+            val count = repeat.groupValues[1]
+            val minutes = repeat.groupValues[2]
+            "$count x\n- $minutes m Z4 HR\n- 2m Z1 HR"
+        } else {
+            val minutes = Regex("(\\d+)\\s*m(?:nt|enit)", RegexOption.IGNORE_CASE).find(detail)?.groupValues?.getOrNull(1)
+            if (minutes != null) {
+                val zone = if (label.contains("pemanasan", true) || label.contains("pendinginan", true) || detail.contains("jalan", true)) "Z1 HR" else "Z2 HR"
+                "- $minutes m $zone"
+            } else null
+        }
+    }.joinToString("\n\n")
 }
 
 @Composable
