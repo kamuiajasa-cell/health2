@@ -60,6 +60,25 @@ class TrainingEngineTest {
         assertTrue(load.first > 0.0)
         assertEquals(load.first, load.second, 0.001)
     }
+    @Test fun strengthSetsRepsAndExternalLoadIncreaseCoachLoad() {
+        val now = System.currentTimeMillis()
+        val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(now))
+        val baseline = StrengthRecord("base", date, "leg", 20, 2, true, "Squat", 3, 10, 0.0)
+        val loaded = StrengthRecord("loaded", date, "leg", 20, 2, true, "Squat", 4, 12, 20.0)
+        val baselineDose = TrainingEngine.strengthLoad48h(listOf(baseline), now).first
+        val loadedDose = TrainingEngine.strengthLoad48h(listOf(loaded), now).first
+        assertTrue("Set, repetisi, dan beban eksternal harus ikut dihitung", loadedDose > baselineDose)
+    }
+
+    @Test fun strengthVolumeAndExternalLoadMultipliersAreCapped() {
+        val now = System.currentTimeMillis()
+        val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(now))
+        val extreme = StrengthRecord("max", date, "leg", 30, 4, true, "Squat", 20, 50, 120.0)
+        val dose = TrainingEngine.strengthLoad48h(listOf(extreme), now).first
+        val expectedMaximum = 1.25 * (1.0 + 4 * 0.45) * 2.0 * 1.5
+        assertEquals(expectedMaximum, dose, 0.001)
+    }
+
     @Test fun cadenceAnalyzerCreatesFiveSecondRunWalkSegments() {
         val points = (0..19).map { second ->
             RawStreamPoint(
