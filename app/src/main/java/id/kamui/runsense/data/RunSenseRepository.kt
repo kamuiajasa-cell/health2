@@ -48,6 +48,55 @@ class RunSenseRepository(context: Context) {
     }
 
 
+
+    /** Merge Intervals.icu / native domain repository records without duplicating stable activity IDs. */
+    fun importDomainRecords(
+        incomingActivities: List<com.runnow.domain.Act>,
+        incomingWellness: List<com.runnow.domain.Wellness>,
+    ): Pair<Int, Int> {
+        val old = readArray("activities")
+        val byId = LinkedHashMap<String, JSONObject>()
+        for (i in 0 until old.length()) {
+            val item = old.optJSONObject(i) ?: continue
+            val id = item.optString("id")
+            if (id.isNotBlank()) byId[id] = item
+        }
+        var added = 0
+        incomingActivities.forEach { a ->
+            val id = a.icuId ?: a.lid
+            val existed = byId.containsKey(id)
+            val item = byId[id] ?: JSONObject()
+            item.put("id", id).put("startedAt", a.start)
+                .put("type", when (a.kind) { com.runnow.domain.ActKind.RUN -> "run"; com.runnow.domain.ActKind.WALK -> "walk"; else -> "other" })
+                .put("durationMin", a.min).put("distanceKm", a.km).put("averageHr", a.avgHr.toInt())
+                .put("externalLoad", a.load).put("quality", false)
+            byId[id] = item
+            if (!existed) added++
+        }
+        val merged = JSONArray()
+        byId.values.sortedBy { it.optLong("startedAt") }.takeLast(1200).forEach { merged.put(it) }
+        writeArray("activities", merged)
+
+        val oldWell = readArray("wellness")
+        val byDate = LinkedHashMap<String, JSONObject>()
+        for (i in 0 until oldWell.length()) {
+            val item = oldWell.optJSONObject(i) ?: continue
+            val date = item.optString("date")
+            if (date.isNotBlank()) byDate[date] = item
+        }
+        incomingWellness.forEach { w ->
+            val item = byDate[w.id] ?: JSONObject().put("date", w.id)
+            if (w.restingHR > 0) item.put("restingHr", w.restingHR.toInt())
+            if (w.sleepSecs > 0) item.put("sleepHours", w.sleepSecs / 3600.0)
+            if (w.hrv > 0) item.put("hrv", w.hrv)
+            byDate[w.id] = item
+        }
+        val mergedWell = JSONArray()
+        byDate.values.sortedBy { it.optString("date") }.takeLast(400).forEach { mergedWell.put(it) }
+        writeArray("wellness", mergedWell)
+        return added to incomingWellness.size
+    }
+
     /** Merge Huawei WatchImport JSON into the same local history used by native Coach and Progress. */
     fun importWatchJson(json: String): Pair<Int, Int> {
         val root = JSONObject(json)
