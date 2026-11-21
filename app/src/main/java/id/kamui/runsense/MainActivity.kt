@@ -359,20 +359,90 @@ private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummar
 }
 
 @Composable
-private fun TrainingScreen(activities: List<ActivityRecord>, strength: List<StrengthRecord>, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit) {
-    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { PageHero("YOUR ACTIVITY LOG", "Every session", "has a story.", "Catatan lari, jalan, dan strength.") }
-        item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+private fun TrainingScreen(
+    activities: List<ActivityRecord>,
+    strength: List<StrengthRecord>,
+    modifier: Modifier,
+    onAdd: () -> Unit,
+    onStrength: () -> Unit
+) {
+    var filter by remember { mutableStateOf("week") }
+    val today = java.time.LocalDate.now()
+    val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
+    val visible = remember(activities, filter, today) {
+        activities.filter { activity ->
+            val date = java.time.Instant.ofEpochMilli(activity.startedAt)
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            when (filter) {
+                "week" -> !date.isBefore(monday)
+                "month" -> date.year == today.year && date.month == today.month
+                else -> true
+            }
+        }.sortedByDescending { it.startedAt }
+    }
+    val totalKm = visible.filter { it.type.equals("run", true) || it.type.equals("walk", true) }.sumOf { it.distanceKm }
+    val totalMinutes = visible.filter { it.type.equals("run", true) || it.type.equals("walk", true) }.sumOf { it.durationMin }
+    val totalTl = visible.sumOf { TrainingEngine.activityLoad(it, AthleteProfile()) }
+    val seconds = (totalMinutes * 60).roundToInt()
+    val durationText = if (seconds >= 3600) "%d:%02d:%02d".format(seconds / 3600, (seconds % 3600) / 60, seconds % 60)
+        else "%d:%02d".format(seconds / 60, seconds % 60)
+    val dateFmt = java.time.format.DateTimeFormatter.ofPattern("d MMM", Locale("id", "ID"))
+    Page(modifier) {
+        PageHero("YOUR ACTIVITY LOG", "Every run", "has a story.", "Jejak latihan, ritme, dan konsistensimu.")
+        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            listOf("week" to "Minggu ini", "month" to "Bulan ini", "all" to "Semua").forEach { (key, label) ->
+                FilterChip(selected = filter == key, onClick = { filter = key }, label = { Text(label, fontSize = 10.sp) })
+            }
+        }
+        Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 13.dp, horizontal = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                listOf(
+                    Triple(visible.size.toString(), "Sesi", Lime),
+                    Triple("%.1f".format(Locale.US, totalKm), "km", White),
+                    Triple(durationText, "Waktu", White),
+                    Triple(totalTl.roundToInt().toString(), "Total TL", Lime)
+                ).forEach { (value, label, color) ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(value, color = color, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(label, color = Muted, fontSize = 9.sp)
+                    }
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(onClick = onAdd, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("＋ Aktivitas") }
             OutlinedButton(onClick = onStrength, modifier = Modifier.weight(1f)) { Text("＋ Strength") }
-        } }
-        item { SectionTitle("Riwayat aktivitas", "${activities.size} SESI") }
-        if (activities.isEmpty()) item { EmptyCard("Belum ada aktivitas yang dicatat.") }
-        items(activities, key = { it.id }) { ActivityCard(it) }
-        item { SectionTitle("Riwayat strength", "${strength.size} CATATAN") }
-        if (strength.isEmpty()) item { EmptyCard("Belum ada sesi strength tersimpan.") }
-        items(strength.take(30), key = { it.id }) { s ->
-            InfoCard(strengthLabel(s.category), "${s.date} · ${s.durationMin} menit · level ${s.level}" + (if (s.exercise.isNotBlank()) " · ${s.exercise}: ${s.sets}×${s.reps}" + (if (s.resistanceKg > 0) " @ ${s.resistanceKg} kg" else "") else ""), if (s.completed) "SELESAI" else "SKIP")
+        }
+        SectionTitle("Riwayat aktivitas", "${visible.size} SESI")
+        if (visible.isEmpty()) EmptyCard(if (filter == "week") "Belum ada aktivitas minggu ini." else if (filter == "month") "Belum ada aktivitas bulan ini." else "Belum ada aktivitas yang dicatat.")
+        else if (filter == "week") visible.forEach { ActivityCard(it) }
+        else {
+            val grouped = visible.groupBy { activity ->
+                java.time.Instant.ofEpochMilli(activity.startedAt).atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDate().with(java.time.DayOfWeek.MONDAY)
+            }.toSortedMap(compareByDescending { it })
+            grouped.forEach { (weekStart, items) ->
+                val km = items.sumOf { it.distanceKm }
+                Row(Modifier.fillMaxWidth().padding(top = 5.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (weekStart == monday) "Minggu ini" else if (weekStart == monday.minusWeeks(1)) "Minggu lalu" else "${weekStart.format(dateFmt)} – ${weekStart.plusDays(6).format(dateFmt)}",
+                        color = White, fontSize = 11.sp, fontWeight = FontWeight.Bold
+                    )
+                    Text("${items.size} sesi · %.1f km".format(Locale.US, km), color = Muted, fontSize = 10.sp)
+                }
+                items.forEach { ActivityCard(it) }
+            }
+        }
+        SectionTitle("Riwayat strength", "${strength.size} CATATAN")
+        if (strength.isEmpty()) EmptyCard("Belum ada sesi strength tersimpan.")
+        strength.take(30).forEach { item ->
+            InfoCard(
+                strengthLabel(item.category),
+                "${item.date} · ${item.durationMin} menit · level ${item.level}" +
+                    (if (item.exercise.isNotBlank()) " · ${item.exercise}: ${item.sets}×${item.reps}" +
+                        (if (item.resistanceKg > 0) " @ ${item.resistanceKg} kg" else "") else ""),
+                if (item.completed) "SELESAI" else "SKIP"
+            )
         }
     }
 }
@@ -1041,7 +1111,7 @@ private fun ActivityCard(a: ActivityRecord) {
     val stamp = SimpleDateFormat("dd MMM · HH:mm", Locale("id", "ID")).format(Date(a.startedAt))
     InfoCard("${a.type.replaceFirstChar { it.uppercase() }} · $stamp",
         "${a.durationMin} menit · ${"%.2f".format(Locale.US, a.distanceKm)} km · HR ${if (a.averageHr > 0) a.averageHr else "—"}",
-        if (a.quality) "QUALITY" else "LOAD ${TrainingEngine.activityLoad(a, AthleteProfile()).roundToInt()}")
+        "TL ${TrainingEngine.activityLoad(a, AthleteProfile()).roundToInt()}")
 }
 
 @Composable
