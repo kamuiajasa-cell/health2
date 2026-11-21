@@ -83,7 +83,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository) {
                 RunTab.TRAINING -> TrainingScreen(activities, strength, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
                 RunTab.PROGRESS -> ProgressScreen(activities, summary, Modifier.padding(padding))
                 RunTab.COACH -> CoachScreen(summary, domainResult, Modifier.padding(padding))
-                RunTab.WATCH -> WatchScreen(Modifier.padding(padding))
+                RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); changed() }
                 RunTab.SETTINGS -> SettingsScreen(profile, wellness, Modifier.padding(padding), onProfile = { showProfile = true }, onWellness = { showWellness = true })
             }
         }
