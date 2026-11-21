@@ -45,11 +45,19 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val Ink = Color(0xFF0A0A0A)
-private val Panel = Color(0xFF1E1E1E)
-private val Lime = Color(0xFFC6FF38)
-private val Muted = Color(0xFF9E9E9E)
-private val White = Color(0xFFFAFAFA)
+private var Ink by mutableStateOf(Color(0xFF0A0A0A))
+private var Panel by mutableStateOf(Color(0xFF1E1E1E))
+private var Lime by mutableStateOf(Color(0xFFC6FF38))
+private var Muted by mutableStateOf(Color(0xFF9E9E9E))
+private var White by mutableStateOf(Color(0xFFFAFAFA))
+
+private fun applyRunSenseTheme(light: Boolean) {
+    Ink = if (light) Color(0xFFF1F3ED) else Color(0xFF0A0A0A)
+    Panel = if (light) Color(0xFFFFFFFF) else Color(0xFF1E1E1E)
+    Lime = if (light) Color(0xFF4E8D12) else Color(0xFFC6FF38)
+    Muted = if (light) Color(0xFF62695D) else Color(0xFF9E9E9E)
+    White = if (light) Color(0xFF171B14) else Color(0xFFFAFAFA)
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,6 +80,8 @@ private val primaryTabs = listOf(RunTab.HOME, RunTab.TRAINING, RunTab.PROGRESS, 
 @Composable
 private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeIntervalsRuntime) {
     var selected by remember { mutableStateOf(RunTab.HOME) }
+    var lightTheme by remember { mutableStateOf(repository.isLightTheme()) }
+    var onboarding by remember { mutableStateOf(!repository.onboardingComplete() && repository.activities().isEmpty() && repository.wellness().isEmpty()) }
     var revision by remember { mutableIntStateOf(0) }
     var showActivity by remember { mutableStateOf(false) }
     var showStrength by remember { mutableStateOf(false) }
@@ -86,6 +96,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     var syncMessage by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val profile = remember(revision) { repository.profile() }
+    val runWalk = remember(revision) { repository.runWalkSettings() }
     val planSettings = remember(revision) { repository.planSettings() }
     val activities = remember(revision) { repository.activities() }
     val strength = remember(revision) { repository.strength() }
@@ -94,11 +105,14 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     val parqAnswers = remember(revision) { repository.parqAnswers() }
     val summary = remember(revision) { TrainingEngine.summarize(activities, strength, wellness, profile) }
     val baseSnapshot = remember(revision) { runCatching { intervals.snapshot() }.getOrNull() }
-    val domainResult = remember(revision) { runCatching { nativeRunSenseAnalysis(activities, strength, wellness, profile, baseSnapshot, planSettings) }.getOrNull() }
+    val domainResult = remember(revision) { runCatching { nativeRunSenseAnalysis(activities, strength, wellness, profile, baseSnapshot, planSettings, runWalk) }.getOrNull() }
     fun changed() { revision++ }
+    SideEffect { applyRunSenseTheme(lightTheme) }
 
-    MaterialTheme(colorScheme = darkColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Ink, onBackground = White, onSurface = White)) {
-        Scaffold(
+    MaterialTheme(colorScheme = if (lightTheme) lightColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Color.White, onBackground = White, onSurface = White) else darkColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Ink, onBackground = White, onSurface = White)) {
+        if (onboarding) {
+            OnboardingScreen(onConnect = { showApiKey = true }, onSkip = { repository.saveOnboardingComplete(); onboarding = false; selected = RunTab.HOME })
+        } else Scaffold(
             containerColor = Ink,
             bottomBar = {
                 NavigationBar(containerColor = Ink, contentColor = White, tonalElevation = 0.dp) {
@@ -135,6 +149,10 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                 RunTab.PROFILE -> SettingsScreen(
                     profile, wellness, Modifier.padding(padding),
                     onCoach = { selected = RunTab.COACH }, onWatch = { selected = RunTab.WATCH },
+                    runWalk = runWalk, lightTheme = lightTheme, coachingStyle = planSettings.style,
+                    onRunWalk = { repository.saveRunWalkSettings(it); changed() },
+                    onTheme = { lightTheme = it; repository.saveLightTheme(it) },
+                    onStyle = { style -> repository.savePlanSettings(planSettings.copy(style = style)); changed() },
                     hasIntervalsKey = intervals.hasApiKey(), syncBusy = syncBusy, syncMessage = syncMessage,
                     onProfile = { showProfile = true }, onWellness = { showWellness = true }, onPlanRace = { showPlanRace = true },
                     strengthTarget = strengthTarget, parqAnswers = parqAnswers,
@@ -186,6 +204,8 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                 syncMessage = "Menyinkronkan Intervals.icu…"
                 try {
                     syncMessage = withContext(Dispatchers.IO) { intervals.sync(key) }
+                    repository.saveOnboardingComplete()
+                    onboarding = false
                     changed()
                 } catch (e: Exception) {
                     syncMessage = "Gagal sinkron: ${e.message}"
