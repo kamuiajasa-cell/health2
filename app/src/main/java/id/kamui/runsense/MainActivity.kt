@@ -61,6 +61,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository) {
     val strength = remember(revision) { repository.strength() }
     val wellness = remember(revision) { repository.wellness() }
     val summary = remember(revision) { TrainingEngine.summarize(activities, strength, wellness, profile) }
+    val domainResult = remember(revision) { runCatching { nativeRunSenseAnalysis(activities, wellness, profile) }.getOrNull() }
     fun changed() { revision++ }
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Ink, onBackground = White, onSurface = White)) {
@@ -78,10 +79,10 @@ private fun RunSenseNativeApp(repository: RunSenseRepository) {
             }
         ) { padding ->
             when (selected) {
-                RunTab.HOME -> HomeScreen(activities, summary, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
+                RunTab.HOME -> HomeScreen(activities, summary, domainResult, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
                 RunTab.TRAINING -> TrainingScreen(activities, strength, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
                 RunTab.PROGRESS -> ProgressScreen(activities, summary, Modifier.padding(padding))
-                RunTab.COACH -> CoachScreen(summary, Modifier.padding(padding))
+                RunTab.COACH -> CoachScreen(summary, domainResult, Modifier.padding(padding))
                 RunTab.SETTINGS -> SettingsScreen(profile, wellness, Modifier.padding(padding), onProfile = { showProfile = true }, onWellness = { showWellness = true })
             }
         }
@@ -106,10 +107,10 @@ private fun Page(modifier: Modifier, content: @Composable ColumnScope.() -> Unit
 }
 
 @Composable
-private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummary, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit) {
+private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummary, domainResult: com.runnow.domain.ProcessResult?, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { BrandHeader() }
-        item { ReadinessCard(summary.readiness, summary.recommendation) }
+        item { ReadinessCard(domainResult?.athlete?.score ?: summary.readiness, summary.recommendation) }\n        item { CoachRecommendationCard(domainResult?.recommendation) }
         item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             MetricCard("BEBAN 7 HARI", fmt(summary.acuteLoad), Modifier.weight(1f))
             MetricCard("ACWR", summary.acwr?.let { "%.2f".format(Locale.US, it) } ?: "—", Modifier.weight(1f))
@@ -171,11 +172,17 @@ private fun ProgressScreen(activities: List<ActivityRecord>, summary: TrainingSu
 }
 
 @Composable
-private fun CoachScreen(summary: TrainingSummary, modifier: Modifier) {
+private fun CoachScreen(summary: TrainingSummary, domainResult: com.runnow.domain.ProcessResult?, modifier: Modifier) {
     Page(modifier) {
         Text("RunSense Coach", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
         Text("Evaluasi beban, pemulihan, dan strength", color = Muted, fontSize = 13.sp)
-        ReadinessCard(summary.readiness, summary.recommendation)
+        ReadinessCard(domainResult?.athlete?.score ?: summary.readiness, summary.recommendation)
+        CoachRecommendationCard(domainResult?.recommendation)
+        domainResult?.athlete?.let { athlete ->
+            InfoCard("Tahap kapasitas", athlete.stageName, "STAGE ${athlete.stage}")
+            InfoCard("Ambang laktat", "LTHR ${athlete.lthr ?: "—"} bpm · LT pace ${athlete.ltPace ?: "—"}", "AUTO / PROFIL")
+            InfoCard("Estimasi 5K", domainResult.goalEst.current, domainResult.goalEst.projection)
+        }
         MetricCard("ACWR", summary.acwr?.let { "%.2f".format(Locale.US, it) } ?: "Belum cukup data beban kronis", Modifier.fillMaxWidth())
         InfoCard("Sesi quality 7 hari", "${summary.qualitySessions7d} sesi tercatat", if (summary.qualitySessions7d >= 2) "KUNCI QUALITY" else "TERPANTAU")
         InfoCard("Strength kaki 48 jam", "%.2f unit beban".format(Locale.US, summary.legStrengthLoad48h), if (summary.legStrengthLoad48h >= 3.4) "WASPADA BEBAN" else "NORMAL")
