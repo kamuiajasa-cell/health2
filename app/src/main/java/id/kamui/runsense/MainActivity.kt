@@ -71,7 +71,8 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     val strength = remember(revision) { repository.strength() }
     val wellness = remember(revision) { repository.wellness() }
     val summary = remember(revision) { TrainingEngine.summarize(activities, strength, wellness, profile) }
-    val domainResult = remember(revision) { runCatching { nativeRunSenseAnalysis(activities, strength, wellness, profile) }.getOrNull() }
+    val baseSnapshot = remember(revision) { runCatching { intervals.snapshot() }.getOrNull() }
+    val domainResult = remember(revision) { runCatching { nativeRunSenseAnalysis(activities, strength, wellness, profile, baseSnapshot) }.getOrNull() }
     fun changed() { revision++ }
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Ink, onBackground = White, onSurface = White)) {
@@ -93,7 +94,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                 RunTab.TRAINING -> TrainingScreen(activities, strength, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
                 RunTab.PROGRESS -> ProgressScreen(activities, summary, Modifier.padding(padding))
                 RunTab.COACH -> CoachScreen(summary, domainResult, Modifier.padding(padding))
-                RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); changed() }
+                RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); intervals.ingestWatchJson(json); changed() }
                 RunTab.SETTINGS -> SettingsScreen(
                     profile, wellness, Modifier.padding(padding),
                     hasIntervalsKey = intervals.hasApiKey(), syncBusy = syncBusy, syncMessage = syncMessage,
