@@ -28,7 +28,12 @@ object TrainingEngine {
             val stamp = parseDate(item.date) ?: return@forEach
             val age = now - stamp
             if (age < -12 * 60 * 60 * 1000L || age > 48 * 60 * 60 * 1000L) return@forEach
-            val dose = (weights[item.category] ?: 0.5) * (1.0 + item.level.coerceIn(0, 4) * 0.45)
+            val effortDose = (weights[item.category] ?: 0.5) * (1.0 + item.level.coerceIn(0, 4) * 0.45)
+            val volumeMultiplier = if (item.sets > 0 && item.reps > 0) {
+                (item.sets.toDouble() * item.reps / 30.0).coerceIn(0.5, 2.0)
+            } else 1.0
+            val externalLoadMultiplier = 1.0 + item.resistanceKg.coerceIn(0.0, 40.0) / 80.0
+            val dose = effortDose * volumeMultiplier * externalLoadMultiplier
             total += dose
             if (item.category in setOf("hip", "calf", "leg", "drill")) legs += dose
         }
