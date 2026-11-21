@@ -32,6 +32,9 @@ import id.kamui.runsense.domain.*
 import com.runnow.domain.ActivityItem
 import com.runnow.domain.Snapshot
 import com.runnow.domain.reviewRun
+import com.runnow.domain.PLAN_DAYS
+import com.runnow.domain.hasPlan
+import com.runnow.domain.planOf
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
