@@ -216,6 +216,61 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
 }
 
 @Composable
+private fun OnboardingScreen(onConnect: () -> Unit, onSkip: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().background(Ink).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 36.dp),
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("RUNSENSE", color = Lime, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+        Spacer(Modifier.height(28.dp))
+        Text("Build your", color = White, fontSize = 38.sp, lineHeight = 42.sp, fontWeight = FontWeight.Black)
+        Text("stronger self.", color = Lime, fontSize = 38.sp, lineHeight = 42.sp, fontWeight = FontWeight.Black)
+        Spacer(Modifier.height(12.dp))
+        Text("Hubungkan data latihanmu. RunSense mengubah aktivitas menjadi arahan yang bisa kamu jalani.", color = Muted, fontSize = 14.sp, lineHeight = 21.sp)
+        Spacer(Modifier.height(28.dp))
+        Surface(color = Panel, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Mulai dengan Intervals.icu", color = White, fontWeight = FontWeight.Bold)
+                Text("API key disimpan di penyimpanan privat perangkat. Kamu juga bisa melanjutkan tanpa sinkronisasi dan mengimpor data jam nanti.", color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+                Button(onClick = onConnect, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Hubungkan & Mulai") }
+                OutlinedButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) { Text("Lanjut tanpa sinkron") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RunWalkSettingsCard(value: RunWalkSettings, onSave: (RunWalkSettings) -> Unit) {
+    var enabled by remember(value) { mutableStateOf(value.enabled) }
+    var run by remember(value) { mutableStateOf("%d:%02d".format(value.runSeconds / 60, value.runSeconds % 60)) }
+    var walk by remember(value) { mutableStateOf("%d:%02d".format(value.walkSeconds / 60, value.walkSeconds % 60)) }
+    fun parseTime(raw: String, fallback: Int): Int {
+        val parts = raw.trim().split(":")
+        if (parts.size != 2) return fallback
+        val minutes = parts[0].toIntOrNull() ?: return fallback
+        val seconds = parts[1].toIntOrNull() ?: return fallback
+        val total = minutes * 60 + seconds
+        return if (seconds < 60 && total in 10..3600) total else fallback
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Pakai run-walk di semua tahap", color = White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text("Mengubah struktur sesi Coach untuk sesi yang sesuai.", color = Muted, fontSize = 10.sp)
+            }
+            Switch(checked = enabled, onCheckedChange = { enabled = it; onSave(value.copy(enabled = it)) })
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(run, { run = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("Durasi lari (mm:ss)") })
+            OutlinedTextField(walk, { walk = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("Durasi jalan (mm:ss)") })
+        }
+        Button(onClick = { onSave(RunWalkSettings(enabled, parseTime(run, value.runSeconds), parseTime(walk, value.walkSeconds))) }, modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Panel, contentColor = Lime)) { Text("Simpan pola run-walk") }
+        Text("Default RunSense: 3:45 lari + 0:30 jalan. Struktur ini hanya diterapkan pada sesi Coach yang sesuai; target pace dan data aktivitas tidak diubah.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+    }
+}
+
+@Composable
 private fun Page(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
 }
