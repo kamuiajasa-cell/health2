@@ -119,9 +119,10 @@ class NativeIntervalsRuntime(context: Context) {
         // cukup membaca cache dan tidak perlu tombol "Muat stream".
         val streamCandidates = domain.data.acts
             .filter { activity ->
+                val streamId = activity.icuId
                 activity.kind == com.runnow.domain.ActKind.RUN &&
                     activity.min >= 5.0 && activity.km >= 0.3 &&
-                    !activity.icuId.isNullOrBlank() && !activity.icuId.startsWith("hw")
+                    !streamId.isNullOrBlank() && !streamId.startsWith("hw")
             }
             .sortedByDescending { it.start }
         var streamsLoaded = 0
