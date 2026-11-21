@@ -87,4 +87,84 @@ object TrainingEngine {
         val p = date.split("-").map { it.toInt() }
         java.util.Calendar.getInstance().apply { set(p[0], p[1] - 1, p[2], 12, 0, 0); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
     } catch (_: Exception) { null }
+
+    data class PlanAdvice(val status: String, val detail: String)
+
+    /** Non-destructive advice: the saved weekly plan is never rewritten. */
+    fun advisePlannedSession(
+        title: String,
+        plannedDate: java.time.LocalDate,
+        activities: List<ActivityRecord>,
+        strength: List<StrengthRecord>,
+        summary: TrainingSummary,
+    ): PlanAdvice? {
+        val normalized = title.lowercase(java.util.Locale.ROOT)
+        val quality = listOf("interval", "tempo", "threshold", "quality", "fartlek", "speed", "vo2").any { normalized.contains(it) }
+        val longRun = listOf("long", "panjang", "endurance").any { normalized.contains(it) }
+        val demanding = quality || longRun
+
+        val recentLegDose = strength.asSequence()
+            .filter { it.completed && it.category in setOf("leg", "calf", "hip", "drill") }
+            .mapNotNull { item ->
+                val date = runCatching { java.time.LocalDate.parse(item.date) }.getOrNull() ?: return@mapNotNull null
+                val daysBefore = java.time.temporal.ChronoUnit.DAYS.between(date, plannedDate)
+                if (daysBefore !in 1..2) return@mapNotNull null
+                val weight = when (item.category) {
+                    "leg" -> 1.25
+                    "calf" -> 1.2
+                    "hip" -> 1.0
+                    else -> 0.55
+                }
+                weight * (1.0 + item.level.coerceIn(0, 4) * 0.45)
+            }.sum()
+
+        val recentHardRun = activities.any { activity ->
+            if (activity.type != "run" || !activity.quality) return@any false
+            val runDate = java.time.Instant.ofEpochMilli(activity.startedAt)
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            val daysBefore = java.time.temporal.ChronoUnit.DAYS.between(runDate, plannedDate)
+            daysBefore in 0..1
+        }
+
+        if (demanding && recentLegDose >= 2.0) {
+            return PlanAdvice(
+                "TINJAU ULANG SESI",
+                "Ada beban strength kaki %.1f unit dalam 48 jam sebelumnya. Pertimbangkan mengubah sesi %s menjadi easy ringan atau menggesernya; jangan memaksakan intensitas."
+                    .format(java.util.Locale.US, recentLegDose, if (quality) "quality" else "long")
+            )
+        }
+        if (demanding && recentHardRun) {
+            return PlanAdvice(
+                "JARAK QUALITY BERDEKATAN",
+                "Ada sesi quality dalam 48 jam sebelum jadwal ini. Pastikan pemulihan cukup; bila kaki belum pulih, pilih easy atau geser sesi."
+            )
+        }
+        if (demanding && summary.qualitySessions7d >= 2) {
+            return PlanAdvice(
+                "BATASI INTENSITAS",
+                "Sudah ada ${summary.qualitySessions7d} sesi quality dalam 7 hari. Hindari menambah sesi berat; prioritaskan easy atau pemulihan."
+            )
+        }
+        if (demanding && (summary.readiness ?: 70) < 45) {
+            return PlanAdvice(
+                "PRIORITASKAN PEMULIHAN",
+                "Readiness rendah (${summary.readiness}/100). Tunda sesi berat sampai respons tubuh membaik."
+            )
+        }
+        if (demanding && summary.acwr != null && summary.acwr > 1.3) {
+            return PlanAdvice(
+                "TUNDA KENAIKAN BEBAN",
+                "ACWR ${"%.2f".format(java.util.Locale.US, summary.acwr)} menunjukkan beban akut meningkat tajam. Ubah sesi ini menjadi easy."
+            )
+        }
+        if (!demanding && recentLegDose >= 2.0) {
+            return PlanAdvice(
+                "PANTAU KAKI",
+                "Strength kaki 48 jam sebelumnya %.1f unit. Jaga sesi tetap ringan dan hentikan bila nyeri atau langkah berubah."
+                    .format(java.util.Locale.US, recentLegDose)
+            )
+        }
+        return null
+    }
+
 }
