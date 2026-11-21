@@ -58,6 +58,7 @@ object TrainingEngine {
             when { ratio > 1.5 -> { score -= 20; reasons += "Beban akut jauh di atas kebiasaan" }; ratio > 1.3 -> { score -= 12; reasons += "Beban akut meningkat tajam" }; ratio > 1.15 -> { score -= 5; reasons += "Beban akut sedikit meningkat" }; ratio in 0.8..1.1 -> score += 5; ratio < 0.6 -> { score -= 6; reasons += "Beban latihan jauh di bawah kebiasaan" } }
         }
         if (legLoad >= 3.4) { score -= 5; reasons += "Paparan strength kaki 48 jam terakhir cukup tinggi" }
+        else if (strengthTotal >= 4.0) { score -= 4; reasons += "Beban strength keseluruhan 48 jam terakhir cukup tinggi" }
         val yesterday = activities.filter { now - it.startedAt in DAY..(2 * DAY) }.sumOf { activityLoad(it, profile) }
         if (yesterday > 90) { score -= 10; reasons += "Ada sesi berbeban tinggi kemarin" }
         val hardDays = (0..2).takeWhile { offset ->
@@ -69,6 +70,7 @@ object TrainingEngine {
         val recommendation = when {
             hard >= 2 -> "Hindari quality tambahan; pilih easy ringan atau pemulihan."
             legLoad >= 3.4 -> "Beri jarak untuk otot kaki setelah strength; pilih easy ringan atau istirahat."
+            strengthTotal >= 4.0 -> "Beban strength 48 jam terakhir cukup besar; pilih easy ringan atau pemulihan."
             readiness != null && readiness < 45 -> "Prioritaskan pemulihan. Jangan mengejar target intensitas."
             ratio != null && ratio > 1.3 -> "Tahan kenaikan beban. Sesi berikutnya sebaiknya easy."
             else -> "Ikuti sesi terencana dengan kontrol effort dan evaluasi respons tubuh."
