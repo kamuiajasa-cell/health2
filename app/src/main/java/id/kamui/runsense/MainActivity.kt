@@ -454,39 +454,292 @@ private fun ProgressScreen(
     domainResult: com.runnow.domain.ProcessResult?,
     snapshot: Snapshot?,
     repository: RunSenseRepository,
+    strength: List<StrengthRecord>,
+    profile: AthleteProfile,
     modifier: Modifier,
     onLoadStream: (String) -> Unit,
     onCheckin: (ActivityRecord) -> Unit,
 ) {
+    var rangeWeeks by remember { mutableIntStateOf(8) }
     val now = System.currentTimeMillis()
-    val last7 = activities.filter { now - it.startedAt in 0..604800000L }
-    val last28 = activities.filter { now - it.startedAt in 0..2419200000L }
-    val km7 = last7.sumOf { it.distanceKm }
-    val mins7 = last7.sumOf { it.durationMin }
-    val avgPace = if (km7 > 0) mins7 / km7 else 0.0
+    val today = java.time.LocalDate.now()
+    val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
+    val fromDate = monday.minusWeeks((rangeWeeks - 1).toLong())
+    val zone = java.time.ZoneId.systemDefault()
+    val fromMs = fromDate.atStartOfDay(zone).toInstant().toEpochMilli()
+    val previousFrom = fromDate.minusWeeks(rangeWeeks.toLong()).atStartOfDay(zone).toInstant().toEpochMilli()
+    val dayMs = 86_400_000.0
+    fun median(values: List<Double>): Double? {
+        val v = values.filter { it.isFinite() }.sorted()
+        if (v.isEmpty()) return null
+        val m = v.size / 2
+        return if (v.size % 2 == 1) v[m] else (v[m - 1] + v[m]) / 2.0
+    }
+    fun paceText(minPerKm: Double): String {
+        if (!minPerKm.isFinite() || minPerKm <= 0) return "—"
+        val sec = (minPerKm * 60).roundToInt()
+        return "${sec / 60}:%02d".format(sec % 60)
+    }
+    fun confidence(n: Int, span: Double): String = when {
+        n >= 12 && span >= 56 -> "tinggi"
+        n >= 6 && span >= 28 -> "sedang"
+        else -> "rendah"
+    }
+    val validRuns = activities.filter { a ->
+        a.type.equals("run", true) && a.startedAt in fromMs..now &&
+            a.durationMin >= 5 && a.distanceKm >= 1 && a.durationMin / a.distanceKm in 2.5..12.0
+    }.sortedBy { it.startedAt }
+    val previousRuns = activities.filter { a ->
+        a.type.equals("run", true) && a.startedAt in previousFrom until fromMs &&
+            a.durationMin >= 5 && a.distanceKm >= 1 && a.durationMin / a.distanceKm in 2.5..12.0
+    }
+    val span = if (validRuns.size > 1) (validRuns.last().startedAt - validRuns.first().startedAt) / dayMs else 0.0
+    val historyComplete = activities.minOfOrNull { it.startedAt }?.let { it <= previousFrom + 14 * dayMs.toLong() } ?: false
+
+    // 1. Performa: pace terbaik pada kelompok jarak yang sama.
+    val buckets = listOf(Triple("3–5 km", 3.0, 5.0), Triple("5–10 km", 5.0, 10.0), Triple("10–21 km", 10.0, 21.0975), Triple("≥21 km", 21.0975, 1000.0))
+    val performanceRows = mutableListOf<Pair<String, String>>()
+    val deltas = mutableListOf<Double>()
+    buckets.forEach { (label, low, high) ->
+        fun best(list: List<ActivityRecord>) = list.filter { it.distanceKm >= low && it.distanceKm < high }
+            .minByOrNull { it.durationMin / it.distanceKm }
+        val current = best(validRuns) ?: return@forEach
+        val prior = best(previousRuns)
+        val currentPace = current.durationMin / current.distanceKm
+        val priorPace = prior?.let { it.durationMin / it.distanceKm }
+        val delta = priorPace?.let { (currentPace - it) * 60.0 }
+        if (delta != null) deltas += delta
+        val change = delta?.let { " · " + when { it < -1 -> "−${abs(it).roundToInt()} dtk"; it > 1 -> "+${it.roundToInt()} dtk"; else -> "sama" } } ?: ""
+        performanceRows += label to "${paceText(currentPace)}/km · ${current.distanceKm} km$change"
+    }
+    val performanceStatus = median(deltas)?.let { if (it <= -5) "Membaik" else if (it >= 5) "Perlu perhatian" else "Stabil" } ?: "Belum cukup data"
+    val performanceInsight = when {
+        deltas.isEmpty() && !historyComplete -> "Riwayat belum mencakup periode pembanding sebelumnya. Belum bisa menyatakan performa naik atau turun."
+        deltas.isEmpty() -> "Belum ada kelompok jarak yang memiliki data pada kedua periode."
+        else -> "Pace terbaik berasal dari ringkasan aktivitas per kelompok jarak, bukan uji lomba. Rute, cuaca, elevasi, dan usaha belum dikontrol."
+    }
+
+    // 2. Efisiensi aerobik: easy run dengan HR valid, dinormalisasi ke median HR.
+    val actsById = snapshot?.acts.orEmpty().associateBy { it.icuId ?: it.lid }
+    val stage = remember(snapshot) { snapshot?.stage() }
+    val easy = validRuns.mapNotNull { activity ->
+        val act = actsById[activity.id] ?: return@mapNotNull null
+        val guess = snapshot?.let { it.detectType(act, stage ?: it.stage()).type }
+        if (guess !in setOf("easy", "recovery") || activity.averageHr < 70 || activity.averageHr > profile.maxHr + 5) return@mapNotNull null
+        Triple(activity, activity.durationMin / activity.distanceKm, activity.averageHr.toDouble())
+    }.sortedBy { it.first.startedAt }
+    val refHr = median(easy.map { it.third })
+    val normalized = if (refHr != null) easy.map { it.second * refHr / it.third } else emptyList()
+    val half = normalized.size / 2
+    val earlyPace = median(normalized.take(half))
+    val latePace = median(normalized.drop(half))
+    val efficiencyChange = if (earlyPace != null && latePace != null && earlyPace > 0) (earlyPace - latePace) / earlyPace * 100 else null
+    val efficiencyStatus = when {
+        normalized.size < 4 -> "Belum cukup data"
+        efficiencyChange!! > 1.5 -> "Membaik"
+        efficiencyChange < -1.5 -> "Menurun"
+        else -> "Stabil"
+    }
+    val efficiencyRows = buildList {
+        if (refHr != null) add("HR acuan" to "${refHr.roundToInt()} bpm")
+        if (earlyPace != null && latePace != null) {
+            add("Pace setara-HR" to "${paceText(earlyPace)} → ${paceText(latePace)} /km")
+            add("Perubahan proxy" to "${efficiencyChange?.let { "%+.1f".format(Locale.US, it) } ?: "—"}%")
+        }
+        add("Easy run valid" to "${easy.size} sesi · minimal 4")
+    }
+
+    // 3. Kapasitas latihan: volume per minggu, minggu aktif, CTL jika tersedia.
+    val weekly = (0 until rangeWeeks).map { index ->
+        val start = fromDate.plusWeeks(index.toLong())
+        val end = start.plusWeeks(1)
+        val list = validRuns.filter { a ->
+            val d = java.time.Instant.ofEpochMilli(a.startedAt).atZone(zone).toLocalDate()
+            !d.isBefore(start) && d.isBefore(end)
+        }
+        Triple(start, list.sumOf { it.distanceKm }, list.size)
+    }
+    val completedWeeks = weekly.dropLast(1)
+    val activeWeeks = completedWeeks.count { it.third > 0 }
+    val firstActive = completedWeeks.indexOfFirst { it.third > 0 }.coerceAtLeast(0)
+    val evalWeeks = completedWeeks.drop(firstActive)
+    val splitWeeks = evalWeeks.size / 2
+    val firstVolume = median(evalWeeks.take(splitWeeks).map { it.second })
+    val lastVolume = median(evalWeeks.drop(splitWeeks).map { it.second })
+    val volumeDelta = if (firstVolume != null && firstVolume > 0 && lastVolume != null) (lastVolume - firstVolume) / firstVolume * 100 else null
+    val capacityStatus = when {
+        volumeDelta == null || evalWeeks.size < 4 -> "Belum cukup data"
+        volumeDelta >= 10 -> "Volume meningkat"
+        volumeDelta <= -10 -> "Volume menurun"
+        else -> "Stabil"
+    }
+    val ctl = snapshot?.wellness.orEmpty().filter { w ->
+        w.ctl != null && w.ctl > 0 && runCatching { java.time.LocalDate.parse(w.id) }.getOrNull()?.let { !it.isBefore(fromDate) && !it.isAfter(today) } == true
+    }
+    val capacityRows = buildList {
+        add("Jarak periode" to "${validRuns.sumOf { it.distanceKm }.let { "%.1f km".format(Locale.US, it) }}")
+        add("Sesi lari" to validRuns.size.toString())
+        add("Minggu berlatih" to "$activeWeeks dari ${completedWeeks.size} minggu selesai")
+        add("Jarak mingguan awal → akhir" to if (firstVolume != null && lastVolume != null) "${firstVolume.toInt()} → ${lastVolume.toInt()} km" else "Belum cukup data")
+        if (ctl.size >= 7) add("Kebugaran (CTL)" to "${ctl.first().ctl?.let { "%.1f".format(Locale.US, it) }} → ${ctl.last().ctl?.let { "%.1f".format(Locale.US, it) }}")
+        val longestGap = validRuns.zipWithNext().maxOfOrNull { (a, b) -> (b.startedAt - a.startedAt) / dayMs }
+        if (longestGap != null) add("Jeda antar lari terlama" to "${longestGap.roundToInt()} hari")
+    }
+
+    // 4. Durability: bandingkan sepertiga akhir dan tengah dari stream lari easy/long.
+    data class DurSample(val date: Long, val paceDrift: Double, val hrDrift: Double?, val efficiencyDrop: Double?)
+    val durability = validRuns.filter { it.distanceKm >= 5 || it.durationMin >= 40 }.mapNotNull { activity ->
+        val act = actsById[activity.id] ?: return@mapNotNull null
+        val kind = snapshot?.let { it.detectType(act, stage ?: it.stage()).type }
+        if (kind !in setOf("easy", "long")) return@mapNotNull null
+        val points = repository.streamPoints(activity.id).filter { it.timeSec.isFinite() && it.speedMps > 0.5 }
+        if (points.size < 30) return@mapNotNull null
+        val start = points.first().timeSec
+        val duration = points.last().timeSec - start
+        if (duration < 2400) return@mapNotNull null
+        fun section(lo: Double, hi: Double) = points.filter {
+            val p = (it.timeSec - start) / duration
+            p >= lo && p < hi
+        }
+        val mid = section(1.0 / 3.0, 2.0 / 3.0)
+        val late = section(2.0 / 3.0, 1.001)
+        if (mid.size < 5 || late.size < 5) return@mapNotNull null
+        val midSpeed = mid.map { it.speedMps }.average()
+        val lateSpeed = late.map { it.speedMps }.average()
+        val midHr = mid.map { it.heartRate }.filter { it > 40 }.takeIf { it.size >= 5 }?.average()
+        val lateHr = late.map { it.heartRate }.filter { it > 40 }.takeIf { it.size >= 5 }?.average()
+        val midPace = 1000.0 / midSpeed / 60.0
+        val latePace = 1000.0 / lateSpeed / 60.0
+        val drift = (latePace - midPace) / midPace * 100
+        val hrDrift = if (midHr != null && lateHr != null) lateHr - midHr else null
+        val midEff = if (midHr != null && midHr > 0) midSpeed / midHr else null
+        val lateEff = if (lateHr != null && lateHr > 0) lateSpeed / lateHr else null
+        val drop = if (midEff != null && lateEff != null && midEff > 0) (midEff - lateEff) / midEff * 100 else null
+        DurSample(activity.startedAt, drift, hrDrift, drop)
+    }
+    val effDrop = median(durability.mapNotNull { it.efficiencyDrop })
+    val durabilityStatus = when {
+        durability.size < 3 -> "Belum cukup data"
+        effDrop!! < 3 -> "Stabil"
+        effDrop < 6 -> "Mulai turun"
+        else -> "Perlu perhatian"
+    }
+    val durabilityRows = buildList {
+        add("Stream lari panjang valid" to "${durability.size} · minimal 3")
+        if (durability.isNotEmpty()) {
+            add("Pace drift median" to "${median(durability.map { it.paceDrift })?.let { "%+.1f%%".format(Locale.US, it) }}")
+            median(durability.mapNotNull { it.hrDrift })?.let { add("Perubahan HR median" to "${it.roundToInt()} bpm") }
+            if (effDrop != null) add("Penurunan efisiensi" to "${ "%.1f%%".format(Locale.US, effDrop) }")
+        }
+    }
+
+    // 5. Keberlanjutan: konsistensi, wellness, readiness dan strength.
+    val recentStrength = strength.filter { item ->
+        item.completed && runCatching { java.time.LocalDate.parse(item.date) }.getOrNull()?.let { !it.isBefore(today.minusDays(27)) } == true
+    }
+    val wellness = snapshot?.wellness.orEmpty()
+    val latestWell = wellness.takeLast(7)
+    val baselineWell = wellness.dropLast(7)
+    val recentRhr = median(latestWell.map { it.restingHR.toDouble() }.filter { it > 30 })
+    val baseRhr = median(baselineWell.map { it.restingHR.toDouble() }.filter { it > 30 })
+    val sleepMedian = median(latestWell.map { it.sleepSecs / 3600.0 }.filter { it > 0 })
+    val readiness = summary.readiness
+    val activeRatio = if (completedWeeks.isNotEmpty()) activeWeeks.toDouble() / completedWeeks.size else 0.0
+    val maxGap = validRuns.zipWithNext().maxOfOrNull { (a, b) -> (b.startedAt - a.startedAt) / dayMs }
+    val sustainabilityStatus = when {
+        recentRhr != null && baseRhr != null && recentRhr - baseRhr >= 3 -> "Pantau pemulihan"
+        completedWeeks.size < 4 -> "Belum cukup data"
+        activeRatio >= .75 -> "Konsisten"
+        activeRatio >= .5 -> "Cukup konsisten"
+        else -> "Sering terputus"
+    }
+    val sustainabilityRows = buildList {
+        add("Minggu aktif" to "$activeWeeks dari ${completedWeeks.size}")
+        add("Jeda antar lari terlama" to (maxGap?.let { "${it.roundToInt()} hari" } ?: "—"))
+        add("Strength selesai · 28 hari" to recentStrength.size.toString())
+        add("Readiness terbaru" to (readiness?.let { "$it/100" } ?: "Belum ada data"))
+        if (recentRhr != null) add("RHR 7 data terbaru" to "${recentRhr.roundToInt()} bpm" + (baseRhr?.let { " · baseline ${it.roundToInt()}" } ?: ""))
+        if (sleepMedian != null) add("Tidur median" to "${ "%.1f jam".format(Locale.US, sleepMedian) }")
+    }
+    val summaryRows = listOf(
+        "Performa" to performanceStatus,
+        "Efisiensi aerobik" to efficiencyStatus,
+        "Kapasitas latihan" to capacityStatus,
+        "Durability" to durabilityStatus,
+        "Keberlanjutan" to sustainabilityStatus
+    )
+    val dateFmt = java.time.format.DateTimeFormatter.ofPattern(if (rangeWeeks >= 26) "d MMM yyyy" else "d MMM", Locale("id", "ID"))
+    val periodActivities = activities.filter { it.startedAt >= fromMs && it.startedAt <= now }.sortedByDescending { it.startedAt }
+
     Page(modifier) {
-        PageHero("PERFORMANCE INTELLIGENCE", "See how far", "you've grown.", "Ringkasan berdasarkan aktivitas yang tersimpan.")
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricCard("JARAK 7 HARI", "%.1f km".format(Locale.US, km7), Modifier.weight(1f))
-            MetricCard("DURASI", "${mins7.roundToInt()} mnt", Modifier.weight(1f))
+        PageHero("PERFORMANCE INTELLIGENCE", "See how far", "you've grown.", "Lima sisi dinilai terpisah, tanpa skor gabungan. Kesimpulan mengikuti kecukupan data.")
+        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            listOf(8 to "8 minggu", 12 to "12 minggu", 26 to "6 bulan", 52 to "1 tahun").forEach { (value, label) ->
+                FilterChip(selected = rangeWeeks == value, onClick = { rangeWeeks = value }, label = { Text(label, fontSize = 9.sp) })
+            }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricCard("PACE RATA-RATA", if (avgPace > 0) pace(avgPace) else "—", Modifier.weight(1f))
-            MetricCard("SESI 28 HARI", last28.size.toString(), Modifier.weight(1f))
+        Text("PERIODE · ${fromDate.format(dateFmt)} – ${today.format(dateFmt)}", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text("Ringkasan progres", color = White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                summaryRows.forEach { (label, status) ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(label, color = White, fontSize = 11.sp)
+                        Text(status, color = if (status in setOf("Membaik", "Stabil", "Konsisten")) Lime else Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
-        MetricCard("BEBAN 7 HARI", fmt(summary.acuteLoad), Modifier.fillMaxWidth())
-        SectionTitle("Volume harian", "7 HARI")
-        WeeklyDistanceChart(activities)
-        TrainingTrendChart(activities)
-        SectionTitle("Sebaran intensitas", "ZONA DETAK JANTUNG")
-        HeartRateZoneChart(activities, snapshot)
+        ProgressDimensionCard("Performa", "Pace terbaik per kelompok jarak dibanding periode sebelumnya", performanceStatus, confidence(deltas.size, span), performanceRows, performanceInsight)
+        ProgressDimensionCard("Efisiensi aerobik", "Easy run dengan HR valid · pace dinormalisasi ke HR acuan", efficiencyStatus, confidence(easy.size, if (easy.size > 1) (easy.last().first.startedAt - easy.first().first.startedAt) / dayMs else 0.0), efficiencyRows, if (easy.size < 4) "${easy.size} sesi memenuhi syarat. Dibutuhkan minimal 4 easy run ≥2 km dengan HR valid." else "Ini proxy efisiensi, bukan pengukuran konsumsi oksigen. Suhu, elevasi, tidur, dan hidrasi belum dikontrol.")
+        ProgressDimensionCard("Kapasitas latihan", "Volume eksternal, minggu aktif, dan CTL bila tersedia", capacityStatus, confidence(validRuns.size, span), capacityRows, if (volumeDelta == null) "Riwayat minggu selesai belum cukup untuk membandingkan tren volume." else "Median jarak mingguan berubah ${ "%+.1f%%".format(Locale.US, volumeDelta) }. Minggu kosong tetap dihitung; kenaikan bukan target yang harus dipaksakan.")
+        ProgressDimensionCard("Durability", "Kestabilan pace dan HR di sepertiga akhir lari panjang", durabilityStatus, confidence(durability.size, if (durability.size > 1) (durability.last().date - durability.first().date) / dayMs else 0.0), durabilityRows, if (durability.size < 3) "Butuh minimal 3 lari easy/long ≥5 km atau ≥40 menit dengan stream valid. Saat ini ${durability.size} sesi memenuhi syarat." else "Dibandingkan sepertiga tengah dengan sepertiga akhir. Elevasi, suhu, dan fueling belum dikontrol.")
+        ProgressDimensionCard("Keberlanjutan", "Konsistensi latihan dan sinyal pemulihan dibanding baseline pribadi", sustainabilityStatus, if (latestWell.size >= 5 || recentStrength.size >= 3) "sedang" else "rendah", sustainabilityRows, if (recentRhr != null && baseRhr != null && recentRhr - baseRhr >= 3) "RHR terbaru ≥3 bpm di atas baseline. Ini sinyal untuk dipantau, bukan diagnosis." else "Data nyeri/cedera tidak tersedia lengkap; kartu ini tidak membuat diagnosis atau skor risiko cedera.")
+        SectionTitle("Kapasitas mingguan", "$rangeWeeks MINGGU")
+        weekly.forEach { (week, km, count) ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("${week.format(dateFmt)} · $count sesi", color = Muted, fontSize = 10.sp)
+                Text("%.1f km".format(Locale.US, km), color = White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+            LinearProgressIndicator(progress = (km / (weekly.maxOfOrNull { it.second }?.coerceAtLeast(1.0) ?: 1.0)).toFloat().coerceIn(0f, 1f), modifier = Modifier.fillMaxWidth().height(5.dp), color = Lime.copy(alpha = .75f), trackColor = Color.White.copy(alpha = .08f))
+        }
         SectionTitle("Review sesi", "MESIN RUNSENSE")
         val runs = domainResult?.activities?.filter { it.act.kind == com.runnow.domain.ActKind.RUN }?.take(5).orEmpty()
         if (runs.isEmpty()) EmptyCard("Review sesi akan muncul setelah aktivitas lari tersedia.")
         else runs.forEach { SessionReviewCard(it, snapshot, repository, onLoadStream) }
-        SectionTitle("Aktivitas 28 hari", "TERBARU")
-        if (last28.isEmpty()) EmptyCard("Data grafik dan tren akan terbentuk setelah aktivitas dicatat.")
-        else last28.sortedByDescending { it.startedAt }.forEach { CheckinActivityCard(it, onCheckin) }
+        SectionTitle("Aktivitas periode ini", "CHECK-IN")
+        if (periodActivities.isEmpty()) EmptyCard("Belum ada aktivitas pada rentang waktu ini.")
+        else periodActivities.take(30).forEach { CheckinActivityCard(it, onCheckin) }
+    }
+}
+
+@Composable
+private fun ProgressDimensionCard(
+    title: String,
+    subtitle: String,
+    status: String,
+    confidence: String,
+    rows: List<Pair<String, String>>,
+    insight: String
+) {
+    Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(status, color = if (status in setOf("Membaik", "Stabil", "Konsisten")) Lime else Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            }
+            Text(subtitle, color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+            if (rows.isEmpty()) Text("Belum ada data yang memenuhi syarat.", color = Muted, fontSize = 10.sp)
+            rows.forEach { (label, value) ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                    Text(label, color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                    Text(value, color = White, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                }
+            }
+            Divider(color = Color.White.copy(alpha = .08f))
+            Text(insight, color = White, fontSize = 10.sp, lineHeight = 15.sp)
+            Text("KEYAKINAN DATA · ${confidence}", color = Muted, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = .6.sp)
+        }
     }
 }
 
