@@ -54,8 +54,8 @@ private val White = Color(0xFFFAFAFA)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = android.graphics.Color.rgb(9, 11, 9)
-        window.navigationBarColor = android.graphics.Color.rgb(9, 11, 9)
+        window.statusBarColor = android.graphics.Color.rgb(10, 10, 10)
+        window.navigationBarColor = android.graphics.Color.rgb(10, 10, 10)
         val repository = RunSenseRepository(applicationContext)
         val intervals = NativeIntervalsRuntime(applicationContext)
         setContent { RunSenseNativeApp(repository, intervals) }
@@ -99,7 +99,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
         Scaffold(
             containerColor = Ink,
             bottomBar = {
-                NavigationBar(containerColor = Color(0xFF111410), contentColor = White, tonalElevation = 0.dp) {
+                NavigationBar(containerColor = Ink, contentColor = White, tonalElevation = 0.dp) {
                     RunTab.entries.forEach { tab ->
                         NavigationBarItem(selected = selected == tab, onClick = { selected = tab },
                             icon = { Text(tab.mark, fontSize = 17.sp) }, label = { Text(tab.label, fontSize = 9.sp, maxLines = 1) },
