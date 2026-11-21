@@ -534,8 +534,16 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
             }
             val weekReview = WeeklyPlanReviewer.evaluate(today, plannedSessions, activities, strength, summary)
             if (planSettings.race.isNotBlank()) {
-                val phase = snapshot?.copy(settings = planSettings)?.racePhase()
-                InfoCard("Target race", "${planSettings.raceDist} km · ${planSettings.raceGoal.ifBlank { "waktu belum ditentukan" }}", phase?.let { "${it.k.uppercase(Locale.ROOT)} · ${it.days} HARI" } ?: "TANGGAL RACE")
+                val daysToRace = runCatching {
+                    java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), java.time.LocalDate.parse(planSettings.race)).toInt()
+                }.getOrNull()
+                val raceTag = when {
+                    daysToRace == null -> "TANGGAL"
+                    daysToRace < 0 -> "SELESAI"
+                    daysToRace == 0 -> "HARI INI"
+                    else -> "H-$daysToRace"
+                }
+                InfoCard("Target race", "${planSettings.raceDist} km · ${planSettings.raceGoal.ifBlank { "waktu belum ditentukan" }} · ${planSettings.race}", raceTag)
             }
             WeeklyReviewCard(weekReview)
             SectionTitle("Usulan jadwal minggu depan", "ADAPTIF")
