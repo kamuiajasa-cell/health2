@@ -1,6 +1,9 @@
 package id.kamui.runsense.data
 
 import android.content.Context
+import android.location.LocationManager
+import java.net.HttpURLConnection
+import java.net.URL
 import id.kamui.runsense.domain.*
 import id.kamui.runsense.domain.RawStreamPoint
 import org.json.JSONArray
@@ -44,6 +47,48 @@ class RunSenseRepository(context: Context) {
         prefs.edit().putBoolean("runwalk_enabled", value.enabled)
             .putInt("runwalk_run_seconds", value.runSeconds.coerceIn(10, 3600))
             .putInt("runwalk_walk_seconds", value.walkSeconds.coerceIn(10, 3600)).apply()
+    }
+    fun currentWeather(): WeatherSnapshot? {
+        val raw = prefs.getString("current_weather", null) ?: return null
+        return runCatching {
+            val o = JSONObject(raw)
+            WeatherSnapshot(o.getDouble("temperatureC"), o.getDouble("apparentC"), o.getInt("humidityPct"),
+                o.getDouble("windKmh"), o.getDouble("precipitationMm"), o.getInt("weatherCode"),
+                o.getLong("fetchedAt"), o.getDouble("latitude"), o.getDouble("longitude"))
+        }.getOrNull()
+    }
+    fun fetchCurrentWeather(): WeatherSnapshot {
+        val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val location = manager.getProviders(true).asSequence().mapNotNull { provider ->
+            runCatching { manager.getLastKnownLocation(provider) }.getOrNull()
+        }.maxByOrNull { it.time } ?: throw IllegalStateException("Lokasi terakhir belum tersedia. Aktifkan lokasi perangkat lalu coba lagi.")
+        val endpoint = "https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}&longitude=${location.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,precipitation,weather_code&timezone=auto"
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 10000
+            readTimeout = 10000
+            requestMethod = "GET"
+        }
+        val root = try {
+            if (connection.responseCode !in 200..299) throw IllegalStateException("Layanan cuaca tidak merespons.")
+            JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+        } finally { connection.disconnect() }
+        val current = root.getJSONObject("current")
+        val weather = WeatherSnapshot(
+            current.optDouble("temperature_2m", Double.NaN),
+            current.optDouble("apparent_temperature", current.optDouble("temperature_2m", Double.NaN)),
+            current.optInt("relative_humidity_2m", 0),
+            current.optDouble("wind_speed_10m", 0.0),
+            current.optDouble("precipitation", 0.0),
+            current.optInt("weather_code", 0),
+            System.currentTimeMillis(), location.latitude, location.longitude
+        )
+        prefs.edit().putString("current_weather", JSONObject()
+            .put("temperatureC", weather.temperatureC).put("apparentC", weather.apparentC)
+            .put("humidityPct", weather.humidityPct).put("windKmh", weather.windKmh)
+            .put("precipitationMm", weather.precipitationMm).put("weatherCode", weather.weatherCode)
+            .put("fetchedAt", weather.fetchedAt).put("latitude", weather.latitude)
+            .put("longitude", weather.longitude).toString()).apply()
+        return weather
     }
     fun isLightTheme(): Boolean = prefs.getBoolean("light_theme", false)
     fun saveLightTheme(enabled: Boolean) { prefs.edit().putBoolean("light_theme", enabled).apply() }
