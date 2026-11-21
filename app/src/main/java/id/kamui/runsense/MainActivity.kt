@@ -44,8 +44,8 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val Ink = Color(0xFF090B09)
-private val Panel = Color(0xFF1E211D)
+private val Ink = Color(0xFF0A0A0A)
+private val Panel = Color(0xFF1E1E1E)
 private val Lime = Color(0xFFC6FF38)
 private val Muted = Color(0xFF9E9E9E)
 private val White = Color(0xFFFAFAFA)
@@ -97,7 +97,6 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     MaterialTheme(colorScheme = darkColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Ink, onBackground = White, onSurface = White)) {
         Scaffold(
             containerColor = Ink,
-            topBar = { AppTopBar(selected) },
             bottomBar = {
                 NavigationBar(containerColor = Color(0xFF111410), contentColor = White, tonalElevation = 0.dp) {
                     RunTab.entries.forEach { tab ->
@@ -220,15 +219,16 @@ private fun AppTopBar(selected: RunTab) {
 
 @Composable
 private fun Page(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+    Column(modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
 }
 
 @Composable
 private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummary, domainResult: com.runnow.domain.ProcessResult?, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { BrandHeader() }
-        item { ReadinessCard(domainResult?.athlete?.score ?: summary.readiness, summary.recommendation) }
+        item { HomePageHero() }
         item { CoachRecommendationCard(domainResult?.recommendation) }
+        item { ReadinessCard(domainResult?.athlete?.score ?: summary.readiness, summary.recommendation) }
+        item { SectionKicker("YOUR TRAINING", "01") }
         item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             MetricCard("BEBAN 7 HARI", fmt(summary.acuteLoad), Modifier.weight(1f))
             MetricCard("ACWR", summary.acwr?.let { "%.2f".format(Locale.US, it) } ?: "—", Modifier.weight(1f))
@@ -238,6 +238,7 @@ private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummar
             Button(onClick = onAdd, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("＋ Catat latihan") }
             OutlinedButton(onClick = onStrength, modifier = Modifier.weight(1f)) { Text("＋ Strength") }
         } }
+        item { SectionKicker("RECENT ACTIVITY", "02") }
         item { SectionTitle("Aktivitas terbaru", "TERSIMPAN DI PERANGKAT") }
         if (activities.isEmpty()) item { EmptyCard("Belum ada aktivitas. Tambahkan sesi pertama untuk mulai membangun analisis beban.") }
         items(activities.take(5), key = { it.id }) { ActivityCard(it) }
@@ -247,7 +248,7 @@ private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummar
 @Composable
 private fun TrainingScreen(activities: List<ActivityRecord>, strength: List<StrengthRecord>, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Latihan", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black); Text("Catatan lari, jalan, dan strength", color = Muted, fontSize = 13.sp) }
+        item { PageHero("YOUR ACTIVITY LOG", "Every session", "has a story.", "Catatan lari, jalan, dan strength.") }
         item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(onClick = onAdd, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("＋ Aktivitas") }
             OutlinedButton(onClick = onStrength, modifier = Modifier.weight(1f)) { Text("＋ Strength") }
@@ -281,8 +282,7 @@ private fun ProgressScreen(
     val mins7 = last7.sumOf { it.durationMin }
     val avgPace = if (km7 > 0) mins7 / km7 else 0.0
     Page(modifier) {
-        Text("Progress", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
-        Text("Ringkasan berdasarkan aktivitas yang tersimpan", color = Muted, fontSize = 13.sp)
+        PageHero("PERFORMANCE INTELLIGENCE", "See how far", "you've grown.", "Ringkasan berdasarkan aktivitas yang tersimpan.")
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             MetricCard("JARAK 7 HARI", "%.1f km".format(Locale.US, km7), Modifier.weight(1f))
             MetricCard("DURASI", "${mins7.roundToInt()} mnt", Modifier.weight(1f))
@@ -474,7 +474,7 @@ private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, repositor
 @Composable
 private fun WeeklyReviewCard(review: WeeklyReview) {
     val ratio = if (review.targetKm > 0) (review.actualKm / review.targetKm).coerceIn(0.0, 1.0).toFloat() else 0f
-    Surface(color = Panel, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
+    Surface(color = Panel, shape = RoundedCornerShape(26.dp), modifier = Modifier.fillMaxWidth().then(Modifier)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
             Text("RINGKASAN PELAKSANAAN", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
@@ -510,8 +510,7 @@ private fun WeeklyReviewCard(review: WeeklyReview) {
 @Composable
 private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, strengthTarget: Int, parqAnswers: List<Boolean?>, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, planSettings: com.runnow.domain.Settings, modifier: Modifier) {
     Page(modifier) {
-        Text("RunSense Coach", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
-        Text("Evaluasi beban, pemulihan, dan strength", color = Muted, fontSize = 13.sp)
+        PageHero("ADAPTIVE TRAINING", "Train with", "better insight.", "Evaluasi beban, pemulihan, dan strength.")
         val parqYes = parqAnswers.count { it == true }
         val parqAnswered = parqAnswers.count { it != null }
         if (parqYes > 0) {
@@ -658,8 +657,7 @@ private fun SettingsScreen(
     onProfile: () -> Unit, onWellness: () -> Unit, onPlanRace: () -> Unit, onApiKey: () -> Unit, onSync: () -> Unit
 ) {
     Page(modifier) {
-        Text("Pengaturan", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
-        Text("Profil fisiologis, sinkronisasi, dan pemulihan", color = Muted, fontSize = 13.sp)
+        PageHero("ATHLETE SETTINGS", "Your", "profile.", "Atur data tubuh, target, jadwal latihan, dan koneksi data.")
         InfoCard("Profil detak jantung", "RHR ${profile.restingHr} · HRmax ${profile.maxHr} · LTHR ${profile.thresholdHr}", "EDIT")
         Button(onClick = onProfile, colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Atur profil") }
         SectionTitle("Rencana dan target race", "TERSIMPAN LOKAL")
@@ -686,6 +684,55 @@ private fun SettingsScreen(
 }
 
 @Composable
+private fun HomePageHero() {
+    val hour = java.time.LocalTime.now().hour
+    val greeting = when (hour) {
+        in 4..10 -> "Selamat pagi"
+        in 11..14 -> "Selamat siang"
+        in 15..17 -> "Selamat sore"
+        else -> "Selamat malam"
+    }
+    val date = SimpleDateFormat("EEEE, dd MMMM", Locale("id", "ID")).format(Date())
+    Column(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("YOUR DAILY RUNNING BRIEF", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            Surface(color = Lime, shape = RoundedCornerShape(10.dp), modifier = Modifier.size(34.dp)) {
+                Box(contentAlignment = Alignment.Center) { Text("R", color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Black) }
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy((-3).dp)) {
+            Text("Run with", color = White, fontSize = 36.sp, lineHeight = 38.sp, fontWeight = FontWeight.Black, letterSpacing = (-1.4).sp)
+            Text("your rhythm.", color = Lime, fontSize = 36.sp, lineHeight = 38.sp, fontWeight = FontWeight.Black, letterSpacing = (-1.4).sp)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(greeting, color = White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text("·", color = Muted, fontSize = 12.sp)
+            Text(date, color = Muted, fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun PageHero(eyebrow: String, title: String, accent: String, subtitle: String) {
+    Column(Modifier.fillMaxWidth().padding(top = 5.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(eyebrow, color = Lime, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.45.sp)
+        Column(verticalArrangement = Arrangement.spacedBy((-3).dp)) {
+            Text(title, color = White, fontSize = 32.sp, lineHeight = 34.sp, fontWeight = FontWeight.Black, letterSpacing = (-1.1).sp)
+            Text(accent, color = Lime, fontSize = 32.sp, lineHeight = 34.sp, fontWeight = FontWeight.Black, letterSpacing = (-1.1).sp)
+        }
+        Text(subtitle, color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+    }
+}
+
+@Composable
+private fun SectionKicker(label: String, index: String) {
+    Row(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+        Text(label, color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.35.sp)
+        Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = .10f)))
+        Text(index, color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
 private fun BrandHeader() {
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text("RunSense", color = Lime, fontSize = 29.sp, fontWeight = FontWeight.Black)
