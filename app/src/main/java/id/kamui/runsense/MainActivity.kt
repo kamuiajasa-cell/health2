@@ -52,6 +52,9 @@ import com.runnow.domain.PLAN_DAYS
 import com.runnow.domain.hasPlan
 import com.runnow.domain.planOf
 import com.runnow.domain.ymd
+import com.runnow.domain.racePhase
+import com.runnow.domain.cutbackDue
+import com.runnow.domain.flagInfo
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -191,7 +194,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
             }
         ) { padding ->
             when (selected) {
-                RunTab.HOME -> HomeScreen(activities, summary, domainResult, weather, weatherMessage, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onRefreshWeather = { refreshWeather() }, onWorkout = { showWorkoutComposer = true })
+                RunTab.HOME -> HomeScreen(activities, summary, domainResult, baseSnapshot, weather, weatherMessage, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onRefreshWeather = { refreshWeather() }, onWorkout = { showWorkoutComposer = true })
                 RunTab.TRAINING -> TrainingScreen(activities, strength, profile, domainResult, baseSnapshot, repository, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onCheckin = { checkinActivity = it })
                 RunTab.PROGRESS -> ProgressScreen(
                     activities, summary, domainResult, baseSnapshot, repository, strength, profile, Modifier.padding(padding),
@@ -350,12 +353,13 @@ private fun Page(modifier: Modifier, content: @Composable ColumnScope.() -> Unit
 }
 
 @Composable
-private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummary, domainResult: com.runnow.domain.ProcessResult?, weather: WeatherSnapshot?, weatherMessage: String, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit, onRefreshWeather: () -> Unit, onWorkout: () -> Unit) {
+private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummary, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, weather: WeatherSnapshot?, weatherMessage: String, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit, onRefreshWeather: () -> Unit, onWorkout: () -> Unit) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { HomePageHero() }
         item { WeatherCard(weather, weatherMessage, onRefreshWeather) }
         item { CoachRecommendationCard(domainResult?.recommendation, onWorkout) }
         item { ReadinessCard(domainResult?.athlete?.score ?: summary.readiness, summary.recommendation) }
+        item { WeeklyPlanHomeCard(snapshot) }
         item { SectionKicker("YOUR TRAINING", "01") }
         item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             MetricCard("BEBAN 7 HARI", fmt(summary.acuteLoad), Modifier.weight(1f))
@@ -373,6 +377,56 @@ private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummar
     }
 }
 
+@Composable
+private fun WeeklyPlanHomeCard(snapshot: Snapshot?) {
+    if (snapshot == null) {
+        Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+            Text("Rencana mingguan belum tersedia. Hubungkan Intervals.icu untuk memuat pengaturan rencana.", Modifier.padding(16.dp), color = Muted, fontSize = 11.sp)
+        }
+        return
+    }
+    val days = listOf("Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min")
+    val phase = snapshot.racePhase()
+    val flag = snapshot.flagInfo()
+    val cutback = snapshot.cutbackDue()
+    val planned = PLAN_DAYS.map { d -> d to snapshot.planOf(d) }
+    val hasPlan = planned.any { it.second != null }
+    Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("RENCANA MINGGUAN", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text(if (hasPlan) "Ritme latihanmu" else "Belum ada jadwal tetap", color = White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+                if (phase != null) {
+                    Surface(color = Lime.copy(alpha = .14f), shape = RoundedCornerShape(20.dp)) {
+                        Text("${phase.k.uppercase()} · ${phase.days} hari", Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = Lime, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            if (hasPlan) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    planned.forEach { (day, plan) ->
+                        Column(Modifier.weight(1f).background(Ink, RoundedCornerShape(9.dp)).padding(vertical = 8.dp, horizontal = 2.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(days[PLAN_DAYS.indexOf(day)], color = Muted, fontSize = 9.sp)
+                            Text(when (plan?.t) { "easy" -> "E"; "quality" -> "Q"; "long" -> "L"; "rest" -> "R"; else -> if (plan == null) "—" else "A" }, color = if (plan == null || plan.t == "rest") Muted else Lime, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(if (plan == null || plan.km <= 0) " " else "%.1f".format(Locale.US, plan.km), color = Muted, fontSize = 8.sp)
+                        }
+                    }
+                }
+                Text("E easy · Q quality · L long · R istirahat · A otomatis", color = Muted, fontSize = 9.sp)
+            } else {
+                Text("Atur hari easy, quality, long run, atau istirahat melalui pengaturan rencana di Coach.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+            }
+            if (cutback || flag != null || phase != null) {
+                HorizontalDivider(color = Ink)
+                if (cutback) Text("Cutback layak dipertimbangkan: long run tiga minggu terakhir relatif stabil. Turunkan beban, jangan menambah jarak.", color = Lime, fontSize = 10.sp, lineHeight = 15.sp)
+                if (flag != null) Text(if (flag.lv == 2) "Penanda nyeri/kaki aktif · hari ${flag.dayN}/14. Hindari sesi quality dan evaluasi gejala." else "Penanda waspada kaki aktif · hari ${flag.dayN}/7. Pantau respons sebelum menaikkan beban.", color = Color(0xFFFFC66D), fontSize = 10.sp, lineHeight = 15.sp)
+                if (phase != null) Text(when (phase.k) { "race" -> "Hari lomba. Prioritaskan kesiapan dan strategi lomba."; "taper" -> "Fase taper: kurangi volume, jaga kaki tetap segar."; "peak" -> "Fase peak: pertahankan sesi kunci tanpa menambah beban mendadak."; else -> "Fase build: bangun konsistensi dan progres bertahap." }, color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+            }
+        }
+    }
+}
 @Composable
 private fun TrainingScreen(
     activities: List<ActivityRecord>,
