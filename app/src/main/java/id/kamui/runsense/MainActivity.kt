@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -711,7 +712,7 @@ private fun SectionKicker(label: String, index: String) {
 @Composable
 private fun CoachRecommendationCard(recommendation: com.runnow.domain.Recommendation?) {
     if (recommendation == null) return
-    Surface(color = Panel, shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+    Surface(color = Panel, shape = RoundedCornerShape(26.dp), modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = .05f), RoundedCornerShape(26.dp))) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text("REKOMENDASI COACH · ${recommendation.tag}", color = Lime, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             Text(recommendation.title, color = White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
@@ -729,7 +730,7 @@ private fun CoachRecommendationCard(recommendation: com.runnow.domain.Recommenda
 
 @Composable
 private fun ReadinessCard(score: Int?, recommendation: String) {
-    Surface(color = Panel, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
+    Surface(color = Panel, shape = RoundedCornerShape(26.dp), modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = .05f), RoundedCornerShape(26.dp))) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("READINESS HARI INI", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
@@ -757,7 +758,7 @@ private fun ReadinessCard(score: Int?, recommendation: String) {
 
 @Composable
 private fun MetricCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(color = Panel, shape = RoundedCornerShape(16.dp), modifier = modifier) {
+    Surface(color = Panel, shape = RoundedCornerShape(16.dp), modifier = modifier.border(1.dp, Color.White.copy(alpha = .05f), RoundedCornerShape(16.dp))) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(label, color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             Text(value, color = White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
@@ -776,7 +777,7 @@ private fun SectionTitle(title: String, action: String) {
 @Composable
 private fun CheckinActivityCard(activity: ActivityRecord, onCheckin: (ActivityRecord) -> Unit) {
     val stamp = SimpleDateFormat("dd MMM · HH:mm", Locale("id", "ID")).format(Date(activity.startedAt))
-    Surface(color = Panel, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+    Surface(color = Panel, shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = .05f), RoundedCornerShape(20.dp))) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
