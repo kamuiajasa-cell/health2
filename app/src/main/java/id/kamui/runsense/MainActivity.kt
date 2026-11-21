@@ -35,6 +35,7 @@ import com.runnow.domain.reviewRun
 import com.runnow.domain.PLAN_DAYS
 import com.runnow.domain.hasPlan
 import com.runnow.domain.planOf
+import com.runnow.domain.ymd
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -115,7 +116,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                         }
                     }
                 )
-                RunTab.COACH -> CoachScreen(summary, strength, domainResult, baseSnapshot, Modifier.padding(padding))
+                RunTab.COACH -> CoachScreen(activities, summary, strength, profile, domainResult, baseSnapshot, Modifier.padding(padding))
                 RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); intervals.ingestWatchJson(json); changed() }
                 RunTab.SETTINGS -> SettingsScreen(
                     profile, wellness, Modifier.padding(padding),
@@ -300,7 +301,7 @@ private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, repositor
 }
 
 @Composable
-private fun CoachScreen(summary: TrainingSummary, strength: List<StrengthRecord>, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, modifier: Modifier) {
+private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, profile: AthleteProfile, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, modifier: Modifier) {
     Page(modifier) {
         Text("RunSense Coach", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
         Text("Evaluasi beban, pemulihan, dan strength", color = Muted, fontSize = 13.sp)
@@ -335,16 +336,21 @@ private fun CoachScreen(summary: TrainingSummary, strength: List<StrengthRecord>
         if (snapshot == null || !snapshot.hasPlan()) {
             EmptyCard("Belum ada rencana mingguan tersimpan di profil RunSense. Coach tetap mengevaluasi beban aktual, tetapi belum bisa membandingkan realisasi dengan target harian.")
         } else {
+            val today = java.time.LocalDate.parse(snapshot.ymd())
+            val monday = today.minusDays((today.dayOfWeek.value + 6).toLong() % 7L)
             PLAN_DAYS.forEach { day ->
                 val plan = snapshot.planOf(day)
+                val plannedDate = monday.plusDays(if (day == 0) 6 else (day - 1).toLong())
                 val dayName = listOf("Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab")[day]
                 val label = plan?.t?.replaceFirstChar { it.uppercase() } ?: "Pemulihan / fleksibel"
                 val km = if (plan != null && plan.km > 0) " · %.1f km".format(Locale.US, plan.km) else ""
-                val dayStrength = strength.filter { item ->
-                    runCatching { java.time.LocalDate.parse(item.date).dayOfWeek.value % 7 == day }.getOrDefault(false) && item.completed
-                }
+                val dayStrength = strength.filter { it.date == plannedDate.toString() && it.completed }
                 val strengthNote = if (dayStrength.isNotEmpty()) " · Strength selesai: " + dayStrength.joinToString { strengthLabel(it.category) } else ""
-                InfoCard(dayName, label + km + strengthNote, if (dayStrength.any { it.category in setOf("leg", "calf", "hip", "drill") }) "PERHATIKAN PEMULIHAN KAKI" else "RENCANA")
+                InfoCard(dayName, "$label$km$strengthNote", if (dayStrength.any { it.category in setOf("leg", "calf", "hip", "drill") }) "STRENGTH TERCATAT" else "RENCANA")
+                if (plan != null) {
+                    val advice = TrainingEngine.advisePlannedSession(plan.t, plannedDate, activities, strength, summary)
+                    if (advice != null) InfoCard("Saran Coach · $dayName", advice.detail, advice.status)
+                }
             }
             Text("Rencana ditampilkan dari konfigurasi mingguan RunSense. Beban strength yang selesai tetap masuk ke evaluasi Coach; catatan strength pada hari yang sama ditandai agar tidak luput saat meninjau jadwal.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
         }
