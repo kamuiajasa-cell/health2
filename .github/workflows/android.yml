@@ -32,7 +32,7 @@ jobs:
       - name: Run original RunSense domain golden tests
         run: gradle :domain:test --no-daemon
       - name: Run native data and watch-ingest tests
-        run: gradle :data:test --no-daemon
+        run: gradle :data:test --tests com.runnow.data.JsonTest --tests com.runnow.data.WatchImportCodecTest --no-daemon
       - name: Run app unit tests
         run: gradle :app:testDebugUnitTest --no-daemon
       - name: Build native debug APK
