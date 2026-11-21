@@ -2,6 +2,9 @@ package id.kamui.runsense.data
 
 import android.content.Context
 import com.runnow.data.Clock
+import com.runnow.data.Codec
+import com.runnow.data.snapshot
+import com.runnow.domain.Snapshot
 import com.runnow.data.HttpClient
 import com.runnow.data.HttpResponse
 import com.runnow.data.IcuHttp
@@ -59,6 +62,13 @@ class NativeIntervalsRuntime(context: Context) {
     }
 
     fun hasApiKey(): Boolean = !domain.apiKey.isNullOrBlank()
+
+    fun snapshot(): Snapshot = domain.data.snapshot(System.currentTimeMillis(), ZoneId.systemDefault())
+
+    fun ingestWatchJson(json: String) {
+        val parsed = Codec.parseWatchImport(json) ?: return
+        domain.ingestWatch(parsed)
+    }
 
     suspend fun sync(apiKey: String? = null): String {
         if (!apiKey.isNullOrBlank()) domain.login(apiKey.trim())
