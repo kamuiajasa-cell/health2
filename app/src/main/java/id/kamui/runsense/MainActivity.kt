@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
 
 private enum class RunTab(val label: String, val mark: String) {
     HOME("Beranda", "⌂"), TRAINING("Latihan", "◷"), PROGRESS("Progress", "↗"),
-    COACH("Coach", "✦"), SETTINGS("Setelan", "⚙")
+    COACH("Coach", "✦"), WATCH("Jam", "⌚"), SETTINGS("Setelan", "⚙")
 }
 
 @Composable
@@ -83,6 +83,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository) {
                 RunTab.TRAINING -> TrainingScreen(activities, strength, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
                 RunTab.PROGRESS -> ProgressScreen(activities, summary, Modifier.padding(padding))
                 RunTab.COACH -> CoachScreen(summary, domainResult, Modifier.padding(padding))
+                RunTab.WATCH -> WatchScreen(Modifier.padding(padding))
                 RunTab.SETTINGS -> SettingsScreen(profile, wellness, Modifier.padding(padding), onProfile = { showProfile = true }, onWellness = { showWellness = true })
             }
         }
