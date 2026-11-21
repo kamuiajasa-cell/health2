@@ -454,6 +454,13 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
             }
             val weekReview = WeeklyPlanReviewer.evaluate(today, plannedSessions, activities, strength, summary)
             WeeklyReviewCard(weekReview)
+            SectionTitle("Usulan jadwal minggu depan", "ADAPTIF")
+            weekReview.nextWeekSessions.forEach { suggested ->
+                val dayName = suggested.date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale("id", "ID"))
+                val km = if (suggested.targetKm > 0) " · %.1f km".format(Locale.US, suggested.targetKm) else ""
+                InfoCard("$dayName · ${suggested.date.dayOfMonth}/${suggested.date.monthValue}", suggested.title + km,
+                    if (suggested.title.startsWith("Easy ringan")) "DIUBAH COACH" else "DIPERTAHANKAN")
+            }
             SectionTitle("Rincian per hari", "TARGET · AKTUAL")
             weekReview.days.forEach { day ->
                 val dayName = day.date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale("id", "ID"))
