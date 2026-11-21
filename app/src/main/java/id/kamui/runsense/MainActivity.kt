@@ -76,6 +76,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     var showProfile by remember { mutableStateOf(false) }
     var showApiKey by remember { mutableStateOf(false) }
     var showPlanRace by remember { mutableStateOf(false) }
+    var checkinActivity by remember { mutableStateOf<ActivityRecord?>(null) }
     var syncBusy by remember { mutableStateOf(false) }
     var syncMessage by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
@@ -109,6 +110,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                 RunTab.TRAINING -> TrainingScreen(activities, strength, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
                 RunTab.PROGRESS -> ProgressScreen(
                     activities, summary, domainResult, baseSnapshot, repository, Modifier.padding(padding),
+                    onCheckin = { checkinActivity = it },
                     onLoadStream = { id ->
                         scope.launch {
                             syncBusy = true
@@ -143,6 +145,13 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                     }
                 )
             }
+        }
+        checkinActivity?.let { activity ->
+            SessionCheckinDialog(activity, onDismiss = { checkinActivity = null }, onSave = { rpe, feel, pain ->
+                repository.updateActivityCheckin(activity.id, rpe, feel, pain)
+                checkinActivity = null
+                changed()
+            })
         }
         if (showActivity) ActivityDialog(onDismiss = { showActivity = false }, onSave = { type, duration, distance, hr, load, quality, rpe, feel, pain ->
             repository.addActivity(type, duration, distance, hr, load, quality, rpe, feel, pain); showActivity = false; changed()
@@ -283,7 +292,7 @@ private fun ProgressScreen(
         else runs.forEach { SessionReviewCard(it, snapshot, repository, onLoadStream) }
         SectionTitle("Aktivitas 28 hari", "TERBARU")
         if (last28.isEmpty()) EmptyCard("Data grafik dan tren akan terbentuk setelah aktivitas dicatat.")
-        else last28.sortedByDescending { it.startedAt }.forEach { ActivityCard(it) }
+        else last28.sortedByDescending { it.startedAt }.forEach { CheckinActivityCard(it, onCheckin) }
     }
 }
 
@@ -688,6 +697,28 @@ private fun SectionTitle(title: String, action: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(title, color = White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Text(action, color = Lime, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun CheckinActivityCard(activity: ActivityRecord, onCheckin: (ActivityRecord) -> Unit) {
+    val stamp = SimpleDateFormat("dd MMM · HH:mm", Locale("id", "ID")).format(Date(activity.startedAt))
+    Surface(color = Panel, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("Lari · $stamp", color = White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text("${activity.durationMin} menit · ${"%.2f".format(Locale.US, activity.distanceKm)} km · HR ${if (activity.averageHr > 0) activity.averageHr else "—"}", color = Muted, fontSize = 11.sp)
+                }
+                Text(if (activity.quality) "QUALITY" else "RUN", color = Lime, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            }
+            if (activity.rpe > 0 || activity.feel.isNotBlank() || activity.pain > 0) {
+                Text("RPE ${activity.rpe}/10 · ${activity.feel.ifBlank { "feel belum diisi" }} · nyeri ${activity.pain}/10", color = Muted, fontSize = 10.sp)
+            }
+            OutlinedButton(onClick = { onCheckin(activity) }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (activity.rpe > 0 || activity.feel.isNotBlank() || activity.pain > 0) "Ubah check-in" else "Isi check-in RPE / nyeri")
+            }
+        }
     }
 }
 
