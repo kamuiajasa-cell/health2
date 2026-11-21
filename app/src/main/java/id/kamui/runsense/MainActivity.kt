@@ -620,6 +620,28 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
                     if (advice != null) InfoCard("Catatan Coach · $dayName", advice.detail, advice.status)
                 }
             }
+            SectionTitle("Strength per hari", "RENCANA · AKTUAL")
+            (0L..6L).forEach { offset ->
+                val date = monday.plusDays(offset)
+                val planKey = if (offset == 6L) 0 else (offset + 1).toInt()
+                val plannedTitle = planSettings.plan[planKey]?.t.orEmpty()
+                val isStrengthPlanned = listOf("strength", "gym", "kekuatan", "beban").any { plannedTitle.contains(it, ignoreCase = true) }
+                val dayRecords = strength.filter { it.date == date.toString() }
+                val completedRecords = dayRecords.filter { it.completed }
+                if (isStrengthPlanned || dayRecords.isNotEmpty()) {
+                    val dayName = date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale("id", "ID"))
+                    val plannedText = if (isStrengthPlanned) "Target: $plannedTitle" else "Strength tambahan"
+                    val actualText = when {
+                        completedRecords.isNotEmpty() -> completedRecords.joinToString { record ->
+                            strengthLabel(record.category) + if (record.exercise.isNotBlank()) " · ${record.exercise} ${record.sets}×${record.reps}" else ""
+                        }
+                        dayRecords.isNotEmpty() -> "Ada catatan, tetapi belum ditandai selesai"
+                        else -> "Belum ada catatan strength"
+                    }
+                    InfoCard("$dayName · ${date.dayOfMonth}/${date.monthValue}", "$plannedText · Aktual: $actualText",
+                        if (completedRecords.isNotEmpty()) "TERLAKSANA" else if (isStrengthPlanned) "BELUM TERCATAT" else "BELUM SELESAI")
+                }
+            }
             Text("Coach membaca sesi lari yang tersimpan dan strength yang ditandai selesai. Kilometer yang terlewat tidak dipindahkan otomatis; saran minggu depan mempertimbangkan konsistensi, ACWR, readiness, dan beban kaki.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
         }
         SectionTitle("Alasan rekomendasi", "TRANSPARAN")
