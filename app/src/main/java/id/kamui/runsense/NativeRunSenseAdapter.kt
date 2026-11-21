@@ -1,9 +1,9 @@
 package id.kamui.runsense
 
 import id.kamui.runsense.domain.ActivityRecord
+import id.kamui.runsense.domain.AthleteProfile
 import id.kamui.runsense.domain.StrengthRecord
 import id.kamui.runsense.domain.TrainingEngine
-import id.kamui.runsense.domain.AthleteProfile
 import id.kamui.runsense.domain.WellnessRecord
 import com.runnow.domain.Act
 import com.runnow.domain.ActKind
@@ -15,52 +15,66 @@ import com.runnow.domain.Wellness
 import com.runnow.domain.processData
 import java.time.ZoneId
 
-/** Adapter from local native records to the original RunSense Kotlin domain model. */
+/** Merge local manual records with the original RunSense data model, preserving imported stream summaries. */
 fun nativeRunSenseAnalysis(
     activities: List<ActivityRecord>,
     strength: List<StrengthRecord>,
     wellness: List<WellnessRecord>,
     profile: AthleteProfile,
+    baseSnapshot: Snapshot? = null,
 ): com.runnow.domain.ProcessResult {
-    val acts = activities.map { a ->
-        Act(
-            start = a.startedAt,
-            kind = when (a.type) { "run" -> ActKind.RUN; "walk" -> ActKind.WALK; else -> ActKind.OTHER },
-            min = a.durationMin,
-            km = a.distanceKm,
-            avgHr = a.averageHr.toDouble(),
-            lid = a.id,
-            name = a.type,
-            load = a.externalLoad,
+    val mergedActs = LinkedHashMap<String, Act>()
+    baseSnapshot?.acts?.forEach { a -> mergedActs[a.icuId ?: a.lid] = a }
+    activities.forEach { a ->
+        if (!mergedActs.containsKey(a.id)) {
+            mergedActs[a.id] = Act(
+                start = a.startedAt,
+                kind = when (a.type) { "run" -> ActKind.RUN; "walk" -> ActKind.WALK; else -> ActKind.OTHER },
+                min = a.durationMin,
+                km = a.distanceKm,
+                avgHr = a.averageHr.toDouble(),
+                lid = a.id,
+                name = a.type,
+                load = a.externalLoad,
+            )
+        }
+    }
+
+    val mergedWell = LinkedHashMap<String, Wellness>()
+    baseSnapshot?.wellness?.forEach { mergedWell[it.id] = it }
+    wellness.forEach { w ->
+        val old = mergedWell[w.date]
+        mergedWell[w.date] = if (old == null) {
+            Wellness(id = w.date, restingHR = w.restingHr.toDouble(), hrv = w.hrv, sleepSecs = w.sleepHours * 3600.0)
+        } else old.copy(
+            restingHR = if (w.restingHr > 0) w.restingHr.toDouble() else old.restingHR,
+            hrv = if (w.hrv > 0) w.hrv else old.hrv,
+            sleepSecs = if (w.sleepHours > 0) w.sleepHours * 3600.0 else old.sleepSecs,
         )
     }
-    val well = wellness.map { w ->
-        Wellness(
-            id = w.date,
-            restingHR = w.restingHr.toDouble(),
-            hrv = w.hrv,
-            sleepSecs = w.sleepHours * 3600.0,
-        )
-    }
-    val p = Profile(
+
+    val p = (baseSnapshot?.profile ?: Profile()).copy(
         rest = profile.restingHr.toDouble(),
         max = profile.maxHr.toDouble(),
         restManual = true,
         lthrC = profile.thresholdHr,
         ltpC = profile.thresholdPaceSecPerKm,
     )
-    val settings = Settings(
+    val ltPace = "${profile.thresholdPaceSecPerKm / 60}:${(profile.thresholdPaceSecPerKm % 60).toString().padStart(2, '0')}"
+    val settings = (baseSnapshot?.settings ?: Settings()).copy(
         style = "moderate",
-        athlete = AthleteSettings(lthr = profile.thresholdHr, ltPace = ""),
+        athlete = AthleteSettings(lthr = profile.thresholdHr, ltPace = ltPace),
         goal = "5K",
     )
     val result = Snapshot(
         profile = p,
-        acts = acts,
-        wellness = well,
+        acts = mergedActs.values.sortedByDescending { it.start },
+        wellness = mergedWell.values.sortedBy { it.id },
+        manualTypes = baseSnapshot?.manualTypes ?: emptyMap(),
         nowMs = System.currentTimeMillis(),
-        zone = ZoneId.systemDefault(),
+        zone = baseSnapshot?.zone ?: ZoneId.systemDefault(),
         settings = settings,
+        streams = baseSnapshot?.streams ?: emptyMap(),
     ).processData()
     val load = TrainingEngine.summarize(activities, strength, wellness, profile)
     val guarded = when {
