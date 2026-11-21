@@ -100,7 +100,14 @@ fun WatchScreen(modifier: Modifier = Modifier, onImported: (String) -> Unit = {}
 
     LaunchedEffect(missing.isEmpty()) { if (missing.isEmpty()) loadBonded() }
 
-    suspend fun importLocal(days: Int = 42): String {\n        val result = withContext(Dispatchers.IO) { WatchImport.build(ctx, days) }\n            ?: return "Database jam belum tersedia. Sinkronkan jam lebih dulu."\n        onImported(result.json.toString())\n        return "Diimpor: ${result.acts} aktivitas, ${result.wellnessDays} hari wellness."\n    }\n\n    fun connect(d: WatchDevice, confirmBind: Boolean) {
+    suspend fun importLocal(days: Int = 42): String {
+        val result = withContext(Dispatchers.IO) { WatchImport.build(ctx, days) }
+            ?: return "Database jam belum tersedia. Sinkronkan jam lebih dulu."
+        onImported(result.json.toString())
+        return "Diimpor: ${result.acts} aktivitas, ${result.wellnessDays} hari wellness."
+    }
+
+    fun connect(d: WatchDevice, confirmBind: Boolean) {
         scope.launch {
             busy = true
             message = "Menyambung ke ${d.name}…"
@@ -188,7 +195,8 @@ fun WatchScreen(modifier: Modifier = Modifier, onImported: (String) -> Unit = {}
                     onClick = {
                         runOp {
                             val r = watch.sync()
-                            "Selesai: ${r.steps} langkah, ${r.workouts} latihan, ${r.sleep} data tidur, ${r.samples} sampel."
+                            val imported = importLocal()
+                            "Selesai: ${r.steps} langkah, ${r.workouts} latihan, ${r.sleep} data tidur, ${r.samples} sampel. $imported"
                         }
                     }
                 ) { Text("Sinkron") }
@@ -197,7 +205,8 @@ fun WatchScreen(modifier: Modifier = Modifier, onImported: (String) -> Unit = {}
                     onClick = {
                         runOp {
                             val r = watch.sync(days = 7)
-                            "Selesai (7 hari): ${r.steps} langkah, ${r.workouts} latihan, ${r.sleep} data tidur, ${r.samples} sampel."
+                            val imported = importLocal(7)
+                            "Selesai (7 hari): ${r.steps} langkah, ${r.workouts} latihan, ${r.sleep} data tidur, ${r.samples} sampel. $imported"
                         }
                     }
                 ) { Text("7 hari") }
@@ -206,7 +215,8 @@ fun WatchScreen(modifier: Modifier = Modifier, onImported: (String) -> Unit = {}
                     onClick = {
                         runOp {
                             val r = watch.syncHrv()
-                            "HRV: ${r.stored} malam tersimpan (${r.result})."
+                            val imported = importLocal()
+                            "HRV: ${r.stored} malam tersimpan (${r.result}). $imported"
                         }
                     }
                 ) { Text("HRV") }
@@ -236,14 +246,16 @@ fun WatchScreen(modifier: Modifier = Modifier, onImported: (String) -> Unit = {}
             TextButton(
                 onClick = {
                     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("log jam", log.joinToString("\n")))
+                    cm.setPrimaryClip(ClipData.newPlainText("log jam", log.joinToString("
+")))
                     message = "Log disalin."
                 }
             ) { Text("Salin log") }
         }
         if (showLog) {
             Text(
-                log.takeLast(60).joinToString("\n").ifBlank { "(log kosong)" },
+                log.takeLast(60).joinToString("
+").ifBlank { "(log kosong)" },
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp
             )
