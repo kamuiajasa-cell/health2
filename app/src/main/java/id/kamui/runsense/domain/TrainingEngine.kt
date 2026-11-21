@@ -73,8 +73,41 @@ object TrainingEngine {
             activities.filter { end - DAY < it.startedAt && it.startedAt <= end }.sumOf { activityLoad(it, profile) } > 70
         }.size
         if (hardDays >= 3) score -= 12 else if (hardDays == 2) score -= 5
+        // Check-in subjektif ikut memengaruhi readiness, bukan hanya evaluasi rencana mingguan.
+        // Minimal dua respons diperlukan untuk RPE/feel; satu nyeri bermakna tetap menjadi sinyal kehati-hatian.
+        val recentCheckins = activities.filter {
+            it.type == "run" && now - it.startedAt in 0..(7 * DAY) &&
+                (it.rpe > 0 || it.pain > 0 || it.feel.isNotBlank())
+        }
+        val checked = recentCheckins.filter { it.rpe in 1..10 }
+        val averageRpe = checked.map { it.rpe }.average().takeIf { checked.size >= 2 }
+        val significantPain = recentCheckins.any { it.pain >= 4 }
+        val repeatedPain = recentCheckins.count { it.pain >= 3 } >= 2
+        val repeatedHeavyFeel = recentCheckins.count {
+            it.feel.equals("sangat berat", true) || it.feel.equals("berat", true)
+        } >= 2
+        val subjectivePenalty = when {
+            significantPain -> 12
+            repeatedPain -> 8
+            averageRpe != null && averageRpe >= 8.0 -> 6
+            repeatedHeavyFeel || (averageRpe != null && averageRpe >= 7.5) -> 3
+            else -> 0
+        }
+        if (subjectivePenalty > 0) {
+            score -= subjectivePenalty
+            inputs++
+            reasons += when {
+                significantPain -> "Ada check-in nyeri >=4/10 dalam 7 hari"
+                repeatedPain -> "Nyeri >=3/10 berulang pada beberapa sesi"
+                averageRpe != null && averageRpe >= 8.0 -> "RPE rata-rata ${averageRpe.roundToInt()}/10 pada minimal dua sesi"
+                else -> "RPE/feel berat berulang dalam 7 hari"
+            }
+        }
         val readiness = if (inputs > 0) score.coerceIn(22, 98) else null
         val recommendation = when {
+            significantPain -> "Ada laporan nyeri bermakna. Jangan jalankan sesi quality; pilih istirahat dan evaluasi nyeri sebelum kembali berlatih."
+            repeatedPain -> "Nyeri berulang terdeteksi dari check-in. Hentikan sesi yang memicu nyeri dan prioritaskan pemulihan."
+            (averageRpe != null && averageRpe >= 8.0) || repeatedHeavyFeel -> "Respons latihan terasa berat berulang. Turunkan intensitas; pilih easy ringan atau pemulihan."
             hard >= 2 -> "Hindari quality tambahan; pilih easy ringan atau pemulihan."
             legLoad >= 3.4 -> "Beri jarak untuk otot kaki setelah strength; pilih easy ringan atau istirahat."
             strengthTotal >= 4.0 -> "Beban strength 48 jam terakhir cukup besar; pilih easy ringan atau pemulihan."
