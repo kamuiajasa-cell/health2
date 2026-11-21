@@ -79,7 +79,7 @@ class MainActivity : ComponentActivity() {
 
 private enum class RunTab(val label: String, val mark: String) {
     HOME("Beranda", "⌂"), TRAINING("Riwayat", "◷"), PROGRESS("Progress", "↗"),
-    PROFILE("Profil", "◎"), COACH("Coach", "✦"), WATCH("Jam", "⌚")
+    PROFILE("Saya", "◎"), COACH("Coach", "✦"), WATCH("Jam", "⌚")
 }
 
 private val primaryTabs = listOf(RunTab.HOME, RunTab.TRAINING, RunTab.PROGRESS, RunTab.PROFILE)
