@@ -49,6 +49,7 @@ object WeeklyPlanReviewer {
             val km = dayRuns.sumOf { it.distanceKm }
             val status = when {
                 session.date.isAfter(today) -> "MENDATANG"
+                session.date == today && dayRuns.isEmpty() -> "HARI INI"
                 session.targetKm <= 0 && dayRuns.isNotEmpty() -> "TERCAPAI"
                 session.targetKm > 0 && km >= session.targetKm * 0.8 -> "TERCAPAI"
                 km > 0 -> "SEBAGIAN"
@@ -56,10 +57,10 @@ object WeeklyPlanReviewer {
             }
             PlannedDayResult(session.date, session.title, session.targetKm, km, dayRuns.size, status)
         }
-        val due = days.filter { !it.date.isAfter(today) }
+        val due = days.filter { it.date.isBefore(today) || (it.date == today && it.status != "HARI INI") }
         val completed = due.count { it.status == "TERCAPAI" }
         val adherence = if (due.isEmpty()) null else (completed * 100.0 / due.size).roundToInt()
-        val target = runPlans.filter { !it.date.isAfter(today) }.sumOf { it.targetKm }
+        val target = due.sumOf { it.targetKm }
         val actual = actualRuns.filter { !it.localDate().isAfter(today) }.sumOf { it.distanceKm }
         val extra = (actual - target).coerceAtLeast(0.0)
 
