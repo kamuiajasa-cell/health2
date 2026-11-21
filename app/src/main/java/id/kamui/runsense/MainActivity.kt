@@ -128,7 +128,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                         }
                     }
                 )
-                RunTab.COACH -> CoachScreen(activities, summary, strength, strengthTarget, domainResult, baseSnapshot, planSettings, Modifier.padding(padding))
+                RunTab.COACH -> CoachScreen(activities, summary, strength, strengthTarget, parqAnswers, domainResult, baseSnapshot, planSettings, Modifier.padding(padding))
                 RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); intervals.ingestWatchJson(json); changed() }
                 RunTab.SETTINGS -> SettingsScreen(
                     profile, wellness, Modifier.padding(padding),
@@ -508,10 +508,24 @@ private fun WeeklyReviewCard(review: WeeklyReview) {
 }
 
 @Composable
-private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, strengthTarget: Int, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, planSettings: com.runnow.domain.Settings, modifier: Modifier) {
+private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, strengthTarget: Int, parqAnswers: List<Boolean?>, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, planSettings: com.runnow.domain.Settings, modifier: Modifier) {
     Page(modifier) {
         Text("RunSense Coach", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
         Text("Evaluasi beban, pemulihan, dan strength", color = Muted, fontSize = 13.sp)
+        val parqYes = parqAnswers.count { it == true }
+        val parqAnswered = parqAnswers.count { it != null }
+        if (parqYes > 0) {
+            Surface(color = Color(0xFF3A2A1B), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("PERHATIAN · PAR-Q: $parqYes JAWABAN YA", color = Color(0xFFFFC36A), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("Coach tidak menganggap Anda otomatis mendapat izin untuk berlatih. Konsultasikan jawaban ini dengan tenaga kesehatan sebelum memulai atau meningkatkan latihan, terutama latihan intensitas tinggi.", color = White, fontSize = 12.sp, lineHeight = 17.sp)
+                }
+            }
+        } else if (parqAnswered < 7) {
+            InfoCard("Skrining PAR-Q belum lengkap", "$parqAnswered dari 7 pertanyaan terisi. Lengkapi di Setelan agar Coach dapat menampilkan status skrining.", "BELUM LENGKAP")
+        } else {
+            InfoCard("Skrining PAR-Q", "Tidak ada jawaban YA pada skrining terakhir. Ini bukan jaminan bebas risiko atau izin medis.", "TERISI")
+        }
         ReadinessCard(domainResult?.athlete?.score ?: summary.readiness, summary.recommendation)
         CoachRecommendationCard(domainResult?.recommendation)
         domainResult?.athlete?.let { athlete ->
