@@ -110,7 +110,11 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
             scope.launch {
                 weatherMessage = "Memuat cuaca dari lokasi perangkat…"
                 try {
-                    withContext(Dispatchers.IO) { repository.fetchCurrentWeather() }
+                    withContext(Dispatchers.IO) {
+                        val current = repository.fetchCurrentWeather()
+                        runCatching { intervals.autoHeatToday(); intervals.refreshClimateContext() }
+                        current
+                    }
                     weatherMessage = "Cuaca diperbarui dari Open-Meteo."
                     revision++
                 } catch (e: Exception) {
