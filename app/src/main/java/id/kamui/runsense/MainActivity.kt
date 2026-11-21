@@ -102,8 +102,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
             containerColor = Ink,
             bottomBar = {
                 NavigationBar(containerColor = Ink, contentColor = White, tonalElevation = 0.dp) {
-                    RunTab.entries.forEach { tab ->
-                        primaryTabs.forEach { tab ->
+                    primaryTabs.forEach { tab ->
                         NavigationBarItem(selected = selected == tab, onClick = { selected = tab },
                             icon = { Text(tab.mark, fontSize = 17.sp) }, label = { Text(tab.label, fontSize = 9.sp, maxLines = 1) },
                             colors = NavigationBarItemDefaults.colors(selectedIconColor = Lime, selectedTextColor = Lime,
