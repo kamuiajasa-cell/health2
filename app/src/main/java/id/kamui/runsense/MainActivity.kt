@@ -1,6 +1,7 @@
 package id.kamui.runsense
 
 import android.os.Bundle
+import android.app.Activity
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
@@ -111,7 +112,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                 try {
                     withContext(Dispatchers.IO) { repository.fetchCurrentWeather() }
                     weatherMessage = "Cuaca diperbarui dari Open-Meteo."
-                    changed()
+                    revision++
                 } catch (e: Exception) {
                     weatherMessage = e.message ?: "Cuaca belum tersedia."
                 }
@@ -146,7 +147,16 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
     val baseSnapshot = remember(revision) { runCatching { intervals.snapshot() }.getOrNull() }
     val domainResult = remember(revision) { runCatching { nativeRunSenseAnalysis(activities, strength, wellness, profile, baseSnapshot, planSettings, runWalk, (weather?.temperatureC ?: 0.0) >= 30.0) }.getOrNull() }
     fun changed() { revision++ }
-    SideEffect { applyRunSenseTheme(lightTheme) }
+    SideEffect {
+        applyRunSenseTheme(lightTheme)
+        (context as? Activity)?.window?.let { window ->
+            val bar = if (lightTheme) android.graphics.Color.rgb(241, 243, 237) else android.graphics.Color.rgb(10, 10, 10)
+            window.statusBarColor = bar
+            window.navigationBarColor = bar
+            androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = lightTheme
+            androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = lightTheme
+        }
+    }
 
     MaterialTheme(colorScheme = if (lightTheme) lightColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Color.White, onBackground = White, onSurface = White) else darkColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Ink, onBackground = White, onSurface = White)) {
         if (onboarding) {
