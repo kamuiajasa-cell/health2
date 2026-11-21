@@ -315,9 +315,10 @@ private fun Page(modifier: Modifier, content: @Composable ColumnScope.() -> Unit
 }
 
 @Composable
-private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummary, domainResult: com.runnow.domain.ProcessResult?, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit) {
+private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummary, domainResult: com.runnow.domain.ProcessResult?, weather: WeatherSnapshot?, weatherMessage: String, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit, onRefreshWeather: () -> Unit) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { HomePageHero() }
+        item { WeatherCard(weather, weatherMessage, onRefreshWeather) }
         item { CoachRecommendationCard(domainResult?.recommendation) }
         item { ReadinessCard(domainResult?.athlete?.score ?: summary.readiness, summary.recommendation) }
         item { SectionKicker("YOUR TRAINING", "01") }
@@ -600,9 +601,10 @@ private fun WeeklyReviewCard(review: WeeklyReview) {
 }
 
 @Composable
-private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, strengthTarget: Int, parqAnswers: List<Boolean?>, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, planSettings: com.runnow.domain.Settings, modifier: Modifier) {
+private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, strengthTarget: Int, parqAnswers: List<Boolean?>, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, planSettings: com.runnow.domain.Settings, weather: WeatherSnapshot?, weatherMessage: String, modifier: Modifier, onRefreshWeather: () -> Unit) {
     Page(modifier) {
-        PageHero("ADAPTIVE TRAINING", "Train with", "better insight.", "Evaluasi beban, pemulihan, dan strength.")
+        PageHero("ADAPTIVE TRAINING", "Train with", "better insight.", "Evaluasi beban, pemulihan, strength, dan kondisi cuaca.")
+        WeatherCard(weather, weatherMessage, onRefreshWeather)
         val parqYes = parqAnswers.count { it == true }
         val parqAnswered = parqAnswers.count { it != null }
         if (parqYes > 0) {
@@ -847,6 +849,39 @@ private fun SectionKicker(label: String, index: String) {
         Text(label, color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.35.sp)
         Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = .10f)))
         Text(index, color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun WeatherCard(weather: WeatherSnapshot?, message: String, onRefresh: () -> Unit) {
+    val status = when {
+        weather == null -> "BELUM DIMUAT"
+        weather.weatherCode >= 95 -> "PETIR"
+        weather.precipitationMm >= 2.0 -> "HUJAN LEBAT"
+        weather.precipitationMm >= 0.3 -> "HUJAN"
+        weather.temperatureC >= 30.0 -> "PANAS"
+        weather.temperatureC >= 25.0 -> "HANGAT"
+        else -> "RELATIF SEJUK"
+    }
+    Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("CUACA & KONTEKS LARI", color = Lime, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
+                Text(status, color = if (weather?.let { it.temperatureC >= 30.0 || it.precipitationMm >= 2.0 || it.weatherCode >= 95 } == true) Color(0xFFFFC36A) else Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            }
+            if (weather == null) {
+                Text("Cuaca belum tersedia. Perbarui dengan lokasi perangkat untuk membaca suhu dan hujan.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+            } else {
+                Text("${"%.1f".format(Locale.US, weather.temperatureC)}°C", color = White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                Text("Terasa ${"%.1f".format(Locale.US, weather.apparentC)}°C · RH ${weather.humidityPct}% · angin ${"%.1f".format(Locale.US, weather.windKmh)} km/j · hujan ${"%.1f".format(Locale.US, weather.precipitationMm)} mm", color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+                if (weather.temperatureC >= 30.0) Text("Panas terdeteksi: turunkan tuntutan pace sekitar 6% dan gunakan HR/RPE sebagai panduan.", color = Color(0xFFFFC36A), fontSize = 10.sp, lineHeight = 15.sp)
+                Text("Open-Meteo · lokasi perangkat · ${SimpleDateFormat("HH:mm", Locale("id", "ID")).format(Date(weather.fetchedAt))}", color = Muted, fontSize = 9.sp)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                if (message.isNotBlank()) Text(message, color = Muted, fontSize = 9.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = onRefresh) { Text("Perbarui cuaca") }
+            }
+        }
     }
 }
 
