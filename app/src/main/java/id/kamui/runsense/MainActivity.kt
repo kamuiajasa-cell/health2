@@ -116,7 +116,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                         }
                     }
                 )
-                RunTab.COACH -> CoachScreen(activities, summary, strength, profile, domainResult, baseSnapshot, Modifier.padding(padding))
+                RunTab.COACH -> CoachScreen(activities, summary, strength, domainResult, baseSnapshot, Modifier.padding(padding))
                 RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); intervals.ingestWatchJson(json); changed() }
                 RunTab.SETTINGS -> SettingsScreen(
                     profile, wellness, Modifier.padding(padding),
@@ -301,7 +301,7 @@ private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, repositor
 }
 
 @Composable
-private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, profile: AthleteProfile, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, modifier: Modifier) {
+private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSummary, strength: List<StrengthRecord>, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, modifier: Modifier) {
     Page(modifier) {
         Text("RunSense Coach", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
         Text("Evaluasi beban, pemulihan, dan strength", color = Muted, fontSize = 13.sp)
@@ -347,7 +347,7 @@ private fun CoachScreen(activities: List<ActivityRecord>, summary: TrainingSumma
                 val dayStrength = strength.filter { it.date == plannedDate.toString() && it.completed }
                 val strengthNote = if (dayStrength.isNotEmpty()) " · Strength selesai: " + dayStrength.joinToString { strengthLabel(it.category) } else ""
                 InfoCard(dayName, "$label$km$strengthNote", if (dayStrength.any { it.category in setOf("leg", "calf", "hip", "drill") }) "STRENGTH TERCATAT" else "RENCANA")
-                if (plan != null) {
+                if (plan != null && !plannedDate.isBefore(today)) {
                     val advice = TrainingEngine.advisePlannedSession(plan.t, plannedDate, activities, strength, summary)
                     if (advice != null) InfoCard("Saran Coach · $dayName", advice.detail, advice.status)
                 }
