@@ -112,7 +112,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                         }
                     }
                 )
-                RunTab.COACH -> CoachScreen(summary, strength, domainResult, Modifier.padding(padding))
+                RunTab.COACH -> CoachScreen(summary, strength, domainResult, baseSnapshot, Modifier.padding(padding))
                 RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); intervals.ingestWatchJson(json); changed() }
                 RunTab.SETTINGS -> SettingsScreen(
                     profile, wellness, Modifier.padding(padding),
@@ -297,7 +297,7 @@ private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, repositor
 }
 
 @Composable
-private fun CoachScreen(summary: TrainingSummary, strength: List<StrengthRecord>, domainResult: com.runnow.domain.ProcessResult?, modifier: Modifier) {
+private fun CoachScreen(summary: TrainingSummary, strength: List<StrengthRecord>, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, modifier: Modifier) {
     Page(modifier) {
         Text("RunSense Coach", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
         Text("Evaluasi beban, pemulihan, dan strength", color = Muted, fontSize = 13.sp)
@@ -327,6 +327,23 @@ private fun CoachScreen(summary: TrainingSummary, strength: List<StrengthRecord>
                 "Hanya sesi yang ditandai selesai yang masuk ke beban strength. Beban kaki dan total strength 48 jam terakhir ikut memengaruhi readiness serta rekomendasi sesi berikutnya.",
                 color = Muted, fontSize = 11.sp, lineHeight = 16.sp
             )
+        }
+        SectionTitle("Rencana mingguan", "DARI RUNSENSE")
+        if (snapshot == null || !snapshot.hasPlan()) {
+            EmptyCard("Belum ada rencana mingguan tersimpan di profil RunSense. Coach tetap mengevaluasi beban aktual, tetapi belum bisa membandingkan realisasi dengan target harian.")
+        } else {
+            PLAN_DAYS.forEach { day ->
+                val plan = snapshot.planOf(day)
+                val dayName = listOf("Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab")[day]
+                val label = plan?.t?.replaceFirstChar { it.uppercase() } ?: "Pemulihan / fleksibel"
+                val km = if (plan != null && plan.km > 0) " · %.1f km".format(Locale.US, plan.km) else ""
+                val dayStrength = strength.filter { item ->
+                    runCatching { java.time.LocalDate.parse(item.date).dayOfWeek.value % 7 == day }.getOrDefault(false) && item.completed
+                }
+                val strengthNote = if (dayStrength.isNotEmpty()) " · Strength selesai: " + dayStrength.joinToString { strengthLabel(it.category) } else ""
+                InfoCard(dayName, label + km + strengthNote, if (dayStrength.any { it.category in setOf("leg", "calf", "hip", "drill") }) "PERHATIKAN PEMULIHAN KAKI" else "RENCANA")
+            }
+            Text("Rencana ditampilkan dari konfigurasi mingguan RunSense. Beban strength yang selesai tetap masuk ke evaluasi Coach; catatan strength pada hari yang sama ditandai agar tidak luput saat meninjau jadwal.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
         }
         SectionTitle("Alasan rekomendasi", "TRANSPARAN")
         summary.rationale.forEachIndexed { index, reason -> InfoCard("Sinyal ${index + 1}", reason, "DATA") }
