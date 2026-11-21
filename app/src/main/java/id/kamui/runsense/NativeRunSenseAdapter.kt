@@ -25,6 +25,7 @@ fun nativeRunSenseAnalysis(
     baseSnapshot: Snapshot? = null,
     settingsOverride: Settings? = null,
     runWalk: RunWalkSettings = RunWalkSettings(),
+    hotWeather: Boolean = false,
 ): com.runnow.domain.ProcessResult {
     val mergedActs = LinkedHashMap<String, Act>()
     baseSnapshot?.acts?.forEach { a -> mergedActs[a.icuId ?: a.lid] = a }
@@ -117,5 +118,8 @@ fun nativeRunSenseAnalysis(
             reason = guarded.reason + " Pola run-walk aktif: $runLabel lari / $walkLabel jalan."
         )
     } else guarded
-    return result.copy(recommendation = adjusted)
+    val weatherAdjusted = if (hotWeather && adjusted.status == "train") {
+        adjusted.copy(reason = adjusted.reason + " Cuaca panas terdeteksi (≥30°C): longgarkan pace sekitar 6% dan gunakan HR serta RPE sebagai patokan utama.")
+    } else adjusted
+    return result.copy(recommendation = weatherAdjusted)
 }
