@@ -11,14 +11,14 @@ RunSense Android is a **native Kotlin + Jetpack Compose application**. It does n
 - The native data module (`:data`) includes RunSense-compatible JSON codecs, Intervals.icu ingestion, Huawei watch import, stream summaries, and repository persistence.
 - Native Intervals.icu API-key entry and sync adapter. Imported activities and wellness are merged into the local history used by Coach and Progress.
 - Native Huawei pairing / connection / sync screen. Synced Huawei workouts and wellness are imported into the same local history; watch stream summaries are passed into the original Kotlin domain engine.
-- Progress includes native session review and on-demand Intervals.icu stream retrieval for activities with an Intervals ID.
-- Huawei transport source is linked from the RunNowNative repository as a Git submodule under `vendor/RunNowNative`; CI checks out submodules.
-- CI runs the original domain golden tests, data/JSON/ingestion golden tests, and app unit tests before packaging the APK.
+- Progress includes native session review, on-demand Intervals.icu stream retrieval, and collapsible **5-second cadence segments**. Raw cadence below 120 is normalized by doubling; windows above 135 spm are classified as running, and the running-cadence average excludes walking windows.
+- CI runs original domain golden tests, focused JSON/Huawei watch-ingestion tests, and app unit tests before packaging the APK.
+- Huawei transport source is linked from RunNowNative as a Git submodule under `vendor/RunNowNative`; CI checks out submodules.
 
 ## Still to integrate / validate
 
 - Full original strength progression and exact Coach state inputs (pain check-in, full autonomic baselines, weekly plan, race settings).
-- Detailed 5-second cadence windows and complete pace/HR zone charts in the native UI.
+- Complete native pace/HR zone charts and broader analytics parity with the web version.
 - GPS/background run recording and native workout delivery to the watch.
 - Verify Huawei pairing, full-history sync, Intervals.icu sync, and stream review on the actual phone and Watch Fit 2. CI compilation is not a substitute for device validation.
 - Migrate existing browser-local records; new syncs can restore data from connected Intervals.icu / Huawei sources, but local browser storage is not copied automatically.
@@ -30,7 +30,9 @@ The migration is incremental. A feature is only marked complete after its Kotlin
 ## Build
 
 ```bash
-gradle :domain:test :data:test :app:testDebugUnitTest
+gradle :domain:test
+gradle :data:test --tests com.runnow.data.JsonTest --tests com.runnow.data.WatchImportCodecTest
+gradle :app:testDebugUnitTest
 gradle :app:assembleDebug
 ```
 
