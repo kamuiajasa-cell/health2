@@ -194,7 +194,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
             }
         ) { padding ->
             when (selected) {
-                RunTab.HOME -> HomeScreen(activities, summary, domainResult, baseSnapshot, weather, weatherMessage, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onRefreshWeather = { refreshWeather() }, onWorkout = { showWorkoutComposer = true })
+                RunTab.HOME -> HomeScreen(activities, summary, domainResult, baseSnapshot, planSettings, weather, weatherMessage, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onRefreshWeather = { refreshWeather() }, onWorkout = { showWorkoutComposer = true })
                 RunTab.TRAINING -> TrainingScreen(activities, strength, profile, domainResult, baseSnapshot, repository, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true }, onCheckin = { checkinActivity = it })
                 RunTab.PROGRESS -> ProgressScreen(
                     activities, summary, domainResult, baseSnapshot, repository, strength, profile, Modifier.padding(padding),
@@ -353,13 +353,13 @@ private fun Page(modifier: Modifier, content: @Composable ColumnScope.() -> Unit
 }
 
 @Composable
-private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummary, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, weather: WeatherSnapshot?, weatherMessage: String, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit, onRefreshWeather: () -> Unit, onWorkout: () -> Unit) {
+private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummary, domainResult: com.runnow.domain.ProcessResult?, snapshot: Snapshot?, planSettings: com.runnow.domain.Settings, weather: WeatherSnapshot?, weatherMessage: String, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit, onRefreshWeather: () -> Unit, onWorkout: () -> Unit) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { HomePageHero() }
         item { WeatherCard(weather, weatherMessage, onRefreshWeather) }
         item { CoachRecommendationCard(domainResult?.recommendation, onWorkout) }
         item { ReadinessCard(summary.readiness ?: domainResult?.athlete?.score, summary.recommendation) }
-        item { WeeklyPlanHomeCard(snapshot) }
+        item { WeeklyPlanHomeCard(snapshot, planSettings) }
         item { SectionKicker("YOUR TRAINING", "01") }
         item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             MetricCard("BEBAN 7 HARI", fmt(summary.acuteLoad), Modifier.weight(1f))
@@ -378,18 +378,12 @@ private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummar
 }
 
 @Composable
-private fun WeeklyPlanHomeCard(snapshot: Snapshot?) {
-    if (snapshot == null) {
-        Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
-            Text("Rencana mingguan belum tersedia. Hubungkan Intervals.icu untuk memuat pengaturan rencana.", Modifier.padding(16.dp), color = Muted, fontSize = 11.sp)
-        }
-        return
-    }
+private fun WeeklyPlanHomeCard(snapshot: Snapshot?, settings: com.runnow.domain.Settings) {
     val days = listOf("Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min")
-    val phase = snapshot.racePhase()
-    val flag = snapshot.flagInfo()
-    val cutback = snapshot.cutbackDue()
-    val planned = PLAN_DAYS.map { d -> d to snapshot.planOf(d) }
+    val phase = snapshot?.racePhase()
+    val flag = snapshot?.flagInfo()
+    val cutback = snapshot?.cutbackDue() == true
+    val planned = PLAN_DAYS.map { d -> d to settings.plan[d] }
     val hasPlan = planned.any { it.second != null }
     Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
