@@ -7,16 +7,24 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.kamui.runsense.data.RunSenseRepository
+import id.kamui.runsense.domain.*
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private val Ink = Color(0xFF090B09)
 private val Panel = Color(0xFF1E211D)
@@ -29,7 +37,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.statusBarColor = android.graphics.Color.rgb(9, 11, 9)
         window.navigationBarColor = android.graphics.Color.rgb(9, 11, 9)
-        setContent { RunSenseNativeApp() }
+        val repository = RunSenseRepository(applicationContext)
+        setContent { RunSenseNativeApp(repository) }
     }
 }
 
@@ -39,94 +48,184 @@ private enum class RunTab(val label: String, val mark: String) {
 }
 
 @Composable
-private fun RunSenseNativeApp() {
+private fun RunSenseNativeApp(repository: RunSenseRepository) {
     var selected by remember { mutableStateOf(RunTab.HOME) }
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = Lime, background = Ink, surface = Panel,
-            onPrimary = Ink, onBackground = White, onSurface = White
-        )
-    ) {
+    var revision by remember { mutableIntStateOf(0) }
+    var showActivity by remember { mutableStateOf(false) }
+    var showStrength by remember { mutableStateOf(false) }
+    var showWellness by remember { mutableStateOf(false) }
+    var showProfile by remember { mutableStateOf(false) }
+    val profile = remember(revision) { repository.profile() }
+    val activities = remember(revision) { repository.activities() }
+    val strength = remember(revision) { repository.strength() }
+    val wellness = remember(revision) { repository.wellness() }
+    val summary = remember(revision) { TrainingEngine.summarize(activities, strength, wellness, profile) }
+    fun changed() { revision++ }
+
+    MaterialTheme(colorScheme = darkColorScheme(primary = Lime, background = Ink, surface = Panel, onPrimary = Ink, onBackground = White, onSurface = White)) {
         Scaffold(
             containerColor = Ink,
             bottomBar = {
                 NavigationBar(containerColor = Color(0xFF111410), contentColor = White) {
                     RunTab.entries.forEach { tab ->
-                        NavigationBarItem(
-                            selected = selected == tab,
-                            onClick = { selected = tab },
-                            icon = { Text(tab.mark, fontSize = 19.sp) },
-                            label = { Text(tab.label, fontSize = 10.sp) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Lime, selectedTextColor = Lime,
-                                indicatorColor = Lime.copy(alpha = .13f),
-                                unselectedIconColor = Muted, unselectedTextColor = Muted
-                            )
-                        )
+                        NavigationBarItem(selected = selected == tab, onClick = { selected = tab },
+                            icon = { Text(tab.mark, fontSize = 19.sp) }, label = { Text(tab.label, fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(selectedIconColor = Lime, selectedTextColor = Lime,
+                                indicatorColor = Lime.copy(alpha = .13f), unselectedIconColor = Muted, unselectedTextColor = Muted))
                     }
                 }
             }
         ) { padding ->
             when (selected) {
-                RunTab.HOME -> HomeScreen(Modifier.padding(padding))
-                RunTab.TRAINING -> SimpleScreen("Latihan", "Rencana dan riwayat latihan", "Belum ada sesi yang ditampilkan", Modifier.padding(padding))
-                RunTab.PROGRESS -> SimpleScreen("Progress", "Perkembangan latihan", "Data progres akan muncul setelah data latihan dimasukkan", Modifier.padding(padding))
-                RunTab.COACH -> SimpleScreen("RunSense Coach", "Keputusan latihan adaptif", "Coach membutuhkan data latihan, pemulihan, dan strength yang tersimpan", Modifier.padding(padding))
-                RunTab.SETTINGS -> SimpleScreen("Pengaturan", "Profil, zona, dan preferensi", "Pengaturan profil dan zona latihan", Modifier.padding(padding))
+                RunTab.HOME -> HomeScreen(activities, summary, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
+                RunTab.TRAINING -> TrainingScreen(activities, strength, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
+                RunTab.PROGRESS -> ProgressScreen(activities, summary, Modifier.padding(padding))
+                RunTab.COACH -> CoachScreen(summary, Modifier.padding(padding))
+                RunTab.SETTINGS -> SettingsScreen(profile, wellness, Modifier.padding(padding), onProfile = { showProfile = true }, onWellness = { showWellness = true })
             }
+        }
+        if (showActivity) ActivityDialog(onDismiss = { showActivity = false }, onSave = { type, duration, distance, hr, load, quality ->
+            repository.addActivity(type, duration, distance, hr, load, quality); showActivity = false; changed()
+        })
+        if (showStrength) StrengthDialog(onDismiss = { showStrength = false }, onSave = { category, duration, level, done ->
+            repository.addStrength(category, duration, level, done); showStrength = false; changed()
+        })
+        if (showWellness) WellnessDialog(onDismiss = { showWellness = false }, onSave = { rhr, sleep, hrv ->
+            repository.addWellness(rhr, sleep, hrv); showWellness = false; changed()
+        })
+        if (showProfile) ProfileDialog(profile, onDismiss = { showProfile = false }, onSave = {
+            repository.saveProfile(it); showProfile = false; changed()
+        })
+    }
+}
+
+@Composable
+private fun Page(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
+}
+
+@Composable
+private fun HomeScreen(activities: List<ActivityRecord>, summary: TrainingSummary, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit) {
+    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item { BrandHeader() }
+        item { ReadinessCard(summary.readiness, summary.recommendation) }
+        item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MetricCard("BEBAN 7 HARI", fmt(summary.acuteLoad), Modifier.weight(1f))
+            MetricCard("ACWR", summary.acwr?.let { "%.2f".format(Locale.US, it) } ?: "—", Modifier.weight(1f))
+            MetricCard("STRENGTH 48J", "%.1f".format(Locale.US, summary.strengthLoad48h), Modifier.weight(1f))
+        } }
+        item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(onClick = onAdd, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("＋ Catat latihan") }
+            OutlinedButton(onClick = onStrength, modifier = Modifier.weight(1f)) { Text("＋ Strength") }
+        } }
+        item { SectionTitle("Aktivitas terbaru", "TERSIMPAN DI PERANGKAT") }
+        if (activities.isEmpty()) item { EmptyCard("Belum ada aktivitas. Tambahkan sesi pertama untuk mulai membangun analisis beban.") }
+        items(activities.take(5), key = { it.id }) { ActivityCard(it) }
+    }
+}
+
+@Composable
+private fun TrainingScreen(activities: List<ActivityRecord>, strength: List<StrengthRecord>, modifier: Modifier, onAdd: () -> Unit, onStrength: () -> Unit) {
+    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Latihan", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black); Text("Catatan lari, jalan, dan strength", color = Muted, fontSize = 13.sp) }
+        item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(onClick = onAdd, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("＋ Aktivitas") }
+            OutlinedButton(onClick = onStrength, modifier = Modifier.weight(1f)) { Text("＋ Strength") }
+        } }
+        item { SectionTitle("Riwayat aktivitas", "${activities.size} SESI") }
+        if (activities.isEmpty()) item { EmptyCard("Belum ada aktivitas yang dicatat.") }
+        items(activities, key = { it.id }) { ActivityCard(it) }
+        item { SectionTitle("Riwayat strength", "${strength.size} CATATAN") }
+        if (strength.isEmpty()) item { EmptyCard("Belum ada sesi strength tersimpan.") }
+        items(strength.take(30), key = { it.id }) { s ->
+            InfoCard(strengthLabel(s.category), "${s.date} · ${s.durationMin} menit · level ${s.level}", if (s.completed) "SELESAI" else "SKIP")
         }
     }
 }
 
 @Composable
-private fun HomeScreen(modifier: Modifier = Modifier) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            Text("RunSense", color = Lime, fontSize = 29.sp, fontWeight = FontWeight.Black)
-            Text("Latihan cerdas, bertahap, dan berkelanjutan", color = Muted, fontSize = 13.sp)
+private fun ProgressScreen(activities: List<ActivityRecord>, summary: TrainingSummary, modifier: Modifier) {
+    val now = System.currentTimeMillis()
+    val last7 = activities.filter { now - it.startedAt in 0..604800000L }
+    val last28 = activities.filter { now - it.startedAt in 0..2419200000L }
+    val km7 = last7.sumOf { it.distanceKm }
+    val mins7 = last7.sumOf { it.durationMin }
+    val avgPace = if (km7 > 0) mins7 / km7 else 0.0
+    Page(modifier) {
+        Text("Progress", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        Text("Ringkasan berdasarkan aktivitas yang tersimpan", color = Muted, fontSize = 13.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MetricCard("JARAK 7 HARI", "%.1f km".format(Locale.US, km7), Modifier.weight(1f))
+            MetricCard("DURASI", "${mins7.roundToInt()} mnt", Modifier.weight(1f))
         }
-        item {
-            Surface(color = Panel, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("RINGKASAN HARI INI", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
-                    Text("Belum ada data hari ini", color = White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                    Text("Sinkronkan atau masukkan aktivitas untuk melihat kondisi latihan.", color = Muted, fontSize = 12.sp)
-                }
-            }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MetricCard("PACE RATA-RATA", if (avgPace > 0) pace(avgPace) else "—", Modifier.weight(1f))
+            MetricCard("SESI 28 HARI", last28.size.toString(), Modifier.weight(1f))
         }
-        item { MetricRow() }
-        item { SectionTitle("Menu utama", "Akses cepat") }
-        item { FeatureCard("Rencana latihan", "Sesi berikutnya dan struktur interval", "LATIHAN") }
-        item { FeatureCard("Analisis progres", "Jarak, pace, detak jantung, dan beban", "PROGRESS") }
-        item { FeatureCard("Adaptive Coach", "Rekomendasi berdasarkan beban dan pemulihan", "COACH") }
-        item {
-            Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("PRINSIP RUNSENSE", color = Lime, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                    Spacer(Modifier.height(6.dp))
-                    Text("Konsistensi lebih penting daripada memaksakan intensitas. Beban latihan harus berkembang sesuai kesiapan tubuh.", color = White, fontSize = 13.sp, lineHeight = 19.sp)
-                }
+        MetricCard("BEBAN 7 HARI", fmt(summary.acuteLoad), Modifier.fillMaxWidth())
+        SectionTitle("Aktivitas 28 hari", "TERBARU")
+        if (last28.isEmpty()) EmptyCard("Data grafik dan tren akan terbentuk setelah aktivitas dicatat.")
+        else last28.sortedByDescending { it.startedAt }.forEach { ActivityCard(it) }
+    }
+}
+
+@Composable
+private fun CoachScreen(summary: TrainingSummary, modifier: Modifier) {
+    Page(modifier) {
+        Text("RunSense Coach", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        Text("Evaluasi beban, pemulihan, dan strength", color = Muted, fontSize = 13.sp)
+        ReadinessCard(summary.readiness, summary.recommendation)
+        MetricCard("ACWR", summary.acwr?.let { "%.2f".format(Locale.US, it) } ?: "Belum cukup data beban kronis", Modifier.fillMaxWidth())
+        InfoCard("Sesi quality 7 hari", "${summary.qualitySessions7d} sesi tercatat", if (summary.qualitySessions7d >= 2) "KUNCI QUALITY" else "TERPANTAU")
+        InfoCard("Strength kaki 48 jam", "%.2f unit beban".format(Locale.US, summary.legStrengthLoad48h), if (summary.legStrengthLoad48h >= 3.4) "WASPADA BEBAN" else "NORMAL")
+        SectionTitle("Alasan rekomendasi", "TRANSPARAN")
+        summary.rationale.forEachIndexed { index, reason -> InfoCard("Sinyal ${index + 1}", reason, "DATA") }
+        Text("Readiness adalah heuristik latihan, bukan diagnosis medis atau prediksi cedera. Nilai dapat belum tersedia jika data pemulihan dan beban belum cukup.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+    }
+}
+
+@Composable
+private fun SettingsScreen(profile: AthleteProfile, wellness: List<WellnessRecord>, modifier: Modifier, onProfile: () -> Unit, onWellness: () -> Unit) {
+    Page(modifier) {
+        Text("Pengaturan", color = Lime, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        Text("Profil fisiologis dan data pemulihan", color = Muted, fontSize = 13.sp)
+        InfoCard("Profil detak jantung", "RHR ${profile.restingHr} · HRmax ${profile.maxHr} · LTHR ${profile.thresholdHr}", "EDIT")
+        Button(onClick = onProfile, colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Atur profil") }
+        SectionTitle("Wellness", "${wellness.size} HARI TERCATAT")
+        wellness.takeLast(7).reversed().forEach { InfoCard(it.date, "RHR ${it.restingHr} bpm · tidur ${it.sleepHours} jam · HRV ${if (it.hrv > 0) it.hrv else 0.0}", "TERSIMPAN") }
+        OutlinedButton(onClick = onWellness) { Text("＋ Catat wellness hari ini") }
+        Text("Semua data disimpan lokal di perangkat. Sinkronisasi otomatis dari Huawei / Intervals belum diaktifkan pada tahap ini.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+    }
+}
+
+@Composable
+private fun BrandHeader() {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text("RunSense", color = Lime, fontSize = 29.sp, fontWeight = FontWeight.Black)
+        Text("Latihan cerdas, bertahap, dan berkelanjutan", color = Muted, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun ReadinessCard(score: Int?, recommendation: String) {
+    Surface(color = Panel, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("READINESS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(score?.toString() ?: "—", color = if (score != null && score < 45) Color(0xFFFFB65C) else Lime, fontSize = 42.sp, fontWeight = FontWeight.Black)
+                Text(if (score == null) "Menunggu data" else "/ 100", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
             }
+            Text(recommendation, color = White, fontSize = 13.sp, lineHeight = 19.sp)
         }
     }
 }
 
 @Composable
-private fun MetricRow() {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        listOf("JARAK", "RATA-RATA HR", "READINESS").forEach { label ->
-            Surface(color = Panel, shape = RoundedCornerShape(16.dp), modifier = Modifier.weight(1f)) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(label, color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Text("—", color = White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text("Belum ada data", color = Muted, fontSize = 9.sp)
-                }
-            }
+private fun MetricCard(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(color = Panel, shape = RoundedCornerShape(16.dp), modifier = modifier) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(label, color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text(value, color = White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -134,22 +233,26 @@ private fun MetricRow() {
 @Composable
 private fun SectionTitle(title: String, action: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(title, color = White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-        Text(action, color = Lime, fontSize = 11.sp)
+        Text(title, color = White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(action, color = Lime, fontSize = 9.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-private fun FeatureCard(title: String, description: String, tag: String) {
-    Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(40.dp).background(Lime.copy(alpha = .13f), CircleShape), contentAlignment = Alignment.Center) {
-                Text("›", color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, color = White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text(description, color = Muted, fontSize = 11.sp)
+private fun ActivityCard(a: ActivityRecord) {
+    val stamp = SimpleDateFormat("dd MMM · HH:mm", Locale("id", "ID")).format(Date(a.startedAt))
+    InfoCard("${a.type.replaceFirstChar { it.uppercase() }} · $stamp",
+        "${a.durationMin} menit · ${"%.2f".format(Locale.US, a.distanceKm)} km · HR ${if (a.averageHr > 0) a.averageHr else "—"}",
+        if (a.quality) "QUALITY" else "LOAD ${TrainingEngine.activityLoad(a, AthleteProfile()).roundToInt()}")
+}
+
+@Composable
+private fun InfoCard(title: String, detail: String, tag: String) {
+    Surface(color = Panel, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, color = White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(detail, color = Muted, fontSize = 11.sp)
             }
             Text(tag, color = Lime, fontSize = 9.sp, fontWeight = FontWeight.Bold)
         }
@@ -157,13 +260,98 @@ private fun FeatureCard(title: String, description: String, tag: String) {
 }
 
 @Composable
-private fun SimpleScreen(title: String, subtitle: String, message: String, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(title, color = Lime, fontSize = 27.sp, fontWeight = FontWeight.Black)
-        Text(subtitle, color = Muted, fontSize = 13.sp)
-        Spacer(Modifier.height(8.dp))
-        Surface(color = Panel, shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
-            Text(message, color = White, fontSize = 14.sp, modifier = Modifier.padding(18.dp))
-        }
+private fun EmptyCard(text: String) {
+    Surface(color = Panel, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+        Text(text, color = Muted, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(16.dp))
     }
+}
+
+@Composable
+private fun ActivityDialog(onDismiss: () -> Unit, onSave: (String, Double, Double, Int, Double, Boolean) -> Unit) {
+    var type by remember { mutableStateOf("run") }
+    var duration by remember { mutableStateOf("30") }
+    var distance by remember { mutableStateOf("3") }
+    var hr by remember { mutableStateOf("") }
+    var load by remember { mutableStateOf("") }
+    var quality by remember { mutableStateOf(false) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Catat aktivitas") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(type == "run", { type = "run" }, label = { Text("Lari") })
+                FilterChip(type == "walk", { type = "walk" }, label = { Text("Jalan") })
+            }
+            NumberField("Durasi (menit)", duration) { duration = it }
+            NumberField("Jarak (km)", distance) { distance = it }
+            NumberField("Rata-rata HR (opsional)", hr) { hr = it }
+            NumberField("Training load eksternal (opsional)", load) { load = it }
+            Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(quality, { quality = it }); Text("Sesi quality / intensitas") }
+        } },
+        confirmButton = { TextButton(onClick = {
+            val d = duration.toDoubleOrNull() ?: 0.0
+            val km = distance.toDoubleOrNull() ?: 0.0
+            if (d > 0 && (type == "walk" || km > 0)) onSave(type, d, km, hr.toIntOrNull() ?: 0, load.toDoubleOrNull() ?: 0.0, quality)
+        }) { Text("Simpan") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } })
+}
+
+@Composable
+private fun StrengthDialog(onDismiss: () -> Unit, onSave: (String, Int, Int, Boolean) -> Unit) {
+    var category by remember { mutableStateOf("leg") }
+    var duration by remember { mutableStateOf("20") }
+    var level by remember { mutableStateOf("1") }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Catat strength") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Kelompok otot", color = Muted)
+            listOf("leg" to "Kaki", "hip" to "Pinggul", "calf" to "Betis", "core" to "Core", "drill" to "Drill").forEach { (key, label) ->
+                FilterChip(category == key, { category = key }, label = { Text(label) })
+            }
+            NumberField("Durasi (menit)", duration) { duration = it }
+            NumberField("Level 0–4", level) { level = it }
+        } },
+        confirmButton = { TextButton(onClick = { onSave(category, (duration.toIntOrNull() ?: 0).coerceAtLeast(0), (level.toIntOrNull() ?: 0).coerceIn(0,4), true) }) { Text("Sudah") } },
+        dismissButton = { TextButton(onClick = { onSave(category, (duration.toIntOrNull() ?: 0), (level.toIntOrNull() ?: 0).coerceIn(0,4), false) }) { Text("Skip") } })
+}
+
+@Composable
+private fun WellnessDialog(onDismiss: () -> Unit, onSave: (Int, Double, Double) -> Unit) {
+    var rhr by remember { mutableStateOf("60") }
+    var sleep by remember { mutableStateOf("7") }
+    var hrv by remember { mutableStateOf("") }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Wellness hari ini") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            NumberField("Resting HR (bpm)", rhr) { rhr = it }
+            NumberField("Tidur (jam)", sleep) { sleep = it }
+            NumberField("HRV (opsional)", hrv) { hrv = it }
+        } },
+        confirmButton = { TextButton(onClick = { onSave(rhr.toIntOrNull() ?: 0, sleep.toDoubleOrNull() ?: 0.0, hrv.toDoubleOrNull() ?: 0.0) }) { Text("Simpan") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } })
+}
+
+@Composable
+private fun ProfileDialog(profile: AthleteProfile, onDismiss: () -> Unit, onSave: (AthleteProfile) -> Unit) {
+    var rhr by remember { mutableStateOf(profile.restingHr.toString()) }
+    var max by remember { mutableStateOf(profile.maxHr.toString()) }
+    var lt by remember { mutableStateOf(profile.thresholdHr.toString()) }
+    var pace by remember { mutableStateOf(profile.thresholdPaceSecPerKm.toString()) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Profil fisiologis") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            NumberField("RHR (bpm)", rhr) { rhr = it }
+            NumberField("HRmax (bpm)", max) { max = it }
+            NumberField("LTHR (bpm)", lt) { lt = it }
+            NumberField("LT pace (detik/km)", pace) { pace = it }
+        } },
+        confirmButton = { TextButton(onClick = { onSave(AthleteProfile(rhr.toIntOrNull() ?: 60, max.toIntOrNull() ?: 185, lt.toIntOrNull() ?: 160, pace.toIntOrNull() ?: 390)) }) { Text("Simpan") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } })
+}
+
+@Composable
+private fun NumberField(label: String, value: String, onValue: (String) -> Unit) {
+    OutlinedTextField(value, onValue, label = { Text(label) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+}
+
+private fun strengthLabel(value: String) = when(value) { "hip" -> "Pinggul"; "calf" -> "Betis"; "leg" -> "Kaki"; "core" -> "Core"; "drill" -> "Drill"; else -> "Strength" }
+private fun fmt(value: Double) = value.roundToInt().toString()
+private fun pace(minutesPerKm: Double): String {
+    val seconds = (minutesPerKm * 60).roundToInt()
+    return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}/km"
 }
