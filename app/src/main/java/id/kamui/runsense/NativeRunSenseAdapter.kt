@@ -22,6 +22,7 @@ fun nativeRunSenseAnalysis(
     wellness: List<WellnessRecord>,
     profile: AthleteProfile,
     baseSnapshot: Snapshot? = null,
+    settingsOverride: Settings? = null,
 ): com.runnow.domain.ProcessResult {
     val mergedActs = LinkedHashMap<String, Act>()
     baseSnapshot?.acts?.forEach { a -> mergedActs[a.icuId ?: a.lid] = a }
@@ -61,10 +62,8 @@ fun nativeRunSenseAnalysis(
         ltpC = profile.thresholdPaceSecPerKm,
     )
     val ltPace = "${profile.thresholdPaceSecPerKm / 60}:${(profile.thresholdPaceSecPerKm % 60).toString().padStart(2, '0')}"
-    val settings = (baseSnapshot?.settings ?: Settings()).copy(
-        style = "moderate",
+    val settings = (settingsOverride ?: baseSnapshot?.settings ?: Settings()).copy(
         athlete = AthleteSettings(lthr = profile.thresholdHr, ltPace = ltPace),
-        goal = "5K",
     )
     val result = Snapshot(
         profile = p,
