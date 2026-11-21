@@ -9,3 +9,4 @@ rootProject.name = "RunSense"
 include(":app")
 include(":domain")
 include(":data")
+include(":huawei")
