@@ -128,7 +128,7 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
                 try {
                     withContext(Dispatchers.IO) { repository.fetchCurrentWeather() }
                     weatherMessage = "Cuaca diperbarui dari Open-Meteo."
-                    changed()
+                    revision++
                 } catch (e: Exception) {
                     weatherMessage = e.message ?: "Cuaca belum tersedia."
                 }
