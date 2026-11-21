@@ -264,6 +264,7 @@ private fun ProgressScreen(
     repository: RunSenseRepository,
     modifier: Modifier,
     onLoadStream: (String) -> Unit,
+    onCheckin: (ActivityRecord) -> Unit,
 ) {
     val now = System.currentTimeMillis()
     val last7 = activities.filter { now - it.startedAt in 0..604800000L }
@@ -799,6 +800,43 @@ private fun ActivityDialog(onDismiss: () -> Unit, onSave: (String, Double, Doubl
             if (d > 0 && (type == "walk" || km > 0)) onSave(type, d, km, hr.toIntOrNull() ?: 0, load.toDoubleOrNull() ?: 0.0, quality, if (type == "run") rpe.roundToInt() else 0, if (type == "run") feel else "", if (type == "run") pain.roundToInt() else 0)
         }) { Text("Simpan") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } })
+}
+
+@Composable
+private fun SessionCheckinDialog(
+    activity: ActivityRecord,
+    onDismiss: () -> Unit,
+    onSave: (Int, String, Int) -> Unit,
+) {
+    var rpe by remember(activity.id) { mutableFloatStateOf(if (activity.rpe > 0) activity.rpe.toFloat() else 5f) }
+    var feel by remember(activity.id) { mutableStateOf(activity.feel.ifBlank { "sesuai" }) }
+    var pain by remember(activity.id) { mutableFloatStateOf(activity.pain.toFloat()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Check-in setelah lari") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Seberapa berat sesi terasa? RPE ${rpe.roundToInt()}/10", color = White, fontSize = 12.sp)
+                Slider(value = rpe, onValueChange = { rpe = it }, valueRange = 0f..10f, steps = 9)
+                Text("Dibanding perkiraan awal", color = White, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    listOf("lebih ringan", "sesuai").forEach { item ->
+                        FilterChip(selected = feel == item, onClick = { feel = item }, label = { Text(item, fontSize = 9.sp) })
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    listOf("lebih berat", "sangat berat").forEach { item ->
+                        FilterChip(selected = feel == item, onClick = { feel = item }, label = { Text(item, fontSize = 9.sp) })
+                    }
+                }
+                Text("Nyeri saat / setelah lari: ${pain.roundToInt()}/10", color = White, fontSize = 12.sp)
+                Slider(value = pain, onValueChange = { pain = it }, valueRange = 0f..10f, steps = 9)
+                Text("Jika nyeri mengubah langkah atau bertambah saat berlari, jangan memaksakan sesi berikutnya.", color = Muted, fontSize = 10.sp)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(rpe.roundToInt(), feel, pain.roundToInt()) }) { Text("Simpan check-in") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
+    )
 }
 
 @Composable
