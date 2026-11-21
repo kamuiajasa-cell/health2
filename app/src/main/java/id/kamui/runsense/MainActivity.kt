@@ -27,6 +27,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import id.kamui.runsense.domain.*
+import com.runnow.domain.ActivityItem
+import com.runnow.domain.Snapshot
+import com.runnow.domain.reviewRun
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -92,7 +95,21 @@ private fun RunSenseNativeApp(repository: RunSenseRepository, intervals: NativeI
             when (selected) {
                 RunTab.HOME -> HomeScreen(activities, summary, domainResult, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
                 RunTab.TRAINING -> TrainingScreen(activities, strength, Modifier.padding(padding), onAdd = { showActivity = true }, onStrength = { showStrength = true })
-                RunTab.PROGRESS -> ProgressScreen(activities, summary, Modifier.padding(padding))
+                RunTab.PROGRESS -> ProgressScreen(
+                    activities, summary, domainResult, baseSnapshot, Modifier.padding(padding),
+                    onLoadStream = { id ->
+                        scope.launch {
+                            syncBusy = true
+                            try {
+                                val loaded = withContext(Dispatchers.IO) { intervals.ensureStreamFor(id) }
+                                syncMessage = if (loaded) "Stream sesi berhasil dimuat." else "Stream tidak tersedia atau belum ada API key."
+                                changed()
+                            } catch (e: Exception) {
+                                syncMessage = "Gagal memuat stream: ${e.message}"
+                            } finally { syncBusy = false }
+                        }
+                    }
+                )
                 RunTab.COACH -> CoachScreen(summary, domainResult, Modifier.padding(padding))
                 RunTab.WATCH -> WatchScreen(Modifier.padding(padding)) { json -> repository.importWatchJson(json); intervals.ingestWatchJson(json); changed() }
                 RunTab.SETTINGS -> SettingsScreen(
@@ -189,7 +206,14 @@ private fun TrainingScreen(activities: List<ActivityRecord>, strength: List<Stre
 }
 
 @Composable
-private fun ProgressScreen(activities: List<ActivityRecord>, summary: TrainingSummary, modifier: Modifier) {
+private fun ProgressScreen(
+    activities: List<ActivityRecord>,
+    summary: TrainingSummary,
+    domainResult: com.runnow.domain.ProcessResult?,
+    snapshot: Snapshot?,
+    modifier: Modifier,
+    onLoadStream: (String) -> Unit,
+) {
     val now = System.currentTimeMillis()
     val last7 = activities.filter { now - it.startedAt in 0..604800000L }
     val last28 = activities.filter { now - it.startedAt in 0..2419200000L }
@@ -208,9 +232,38 @@ private fun ProgressScreen(activities: List<ActivityRecord>, summary: TrainingSu
             MetricCard("SESI 28 HARI", last28.size.toString(), Modifier.weight(1f))
         }
         MetricCard("BEBAN 7 HARI", fmt(summary.acuteLoad), Modifier.fillMaxWidth())
+        SectionTitle("Review sesi", "MESIN RUNSENSE")
+        val runs = domainResult?.activities?.filter { it.act.kind == com.runnow.domain.ActKind.RUN }?.take(5).orEmpty()
+        if (runs.isEmpty()) EmptyCard("Review sesi akan muncul setelah aktivitas lari tersedia.")
+        else runs.forEach { SessionReviewCard(it, snapshot, onLoadStream) }
         SectionTitle("Aktivitas 28 hari", "TERBARU")
         if (last28.isEmpty()) EmptyCard("Data grafik dan tren akan terbentuk setelah aktivitas dicatat.")
         else last28.sortedByDescending { it.startedAt }.forEach { ActivityCard(it) }
+    }
+}
+
+@Composable
+private fun SessionReviewCard(item: ActivityItem, snapshot: Snapshot?, onLoadStream: (String) -> Unit) {
+    val review = remember(item.act, snapshot) { snapshot?.reviewRun(item.act) }
+    val streamKey = item.act.icuId ?: item.act.lid
+    val hasStream = snapshot?.streams?.containsKey(streamKey) == true
+    Surface(color = Panel, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text(item.title, color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(item.meta, color = Muted, fontSize = 11.sp)
+            Text(review?.summary?.ifBlank { item.why } ?: item.why, color = White, fontSize = 12.sp, lineHeight = 17.sp)
+            review?.sections?.take(3)?.forEach { section ->
+                Text(section.title, color = Lime, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                section.notes.take(2).forEach { note ->
+                    Text("• ${note.text}", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+                }
+            }
+            if (item.act.icuId != null && !hasStream) {
+                OutlinedButton(onClick = { onLoadStream(streamKey) }) { Text("Muat stream Intervals.icu") }
+            } else {
+                Text(if (hasStream) "Data stream tersedia untuk review." else "Stream detail tidak tersedia untuk sesi ini.", color = Muted, fontSize = 10.sp)
+            }
+        }
     }
 }
 
